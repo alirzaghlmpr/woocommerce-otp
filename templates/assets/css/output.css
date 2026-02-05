@@ -1,0 +1,330 @@
+﻿/* Pure CSS stylesheet for templates/login/index.php (no Tailwind) */
+@font-face {
+  font-family: "YekanBakhFaNum";
+  src: url("../fonts/YekanBakhFaNum-VF.woff2") format("woff2"),
+       url("../fonts/YekanBakhFaNum-VF.woff") format("woff");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}:root {
+  --main-blue-10: #1e69e81a;
+  --main-blue-100: #1e69e8;
+  --main-blue-200: #0c2f6c;
+  --gray-100: #f3f4f6;
+  --gray-200: #e5e7eb;
+  --gray-400: #9ca3af;
+  --gray-500: #6b7280;
+  --gray-600: #4b5563;
+  --gray-700: #374151;
+  --red-600: #dc2626;
+  --shadow-soft: 0 12px 40px rgba(15, 23, 42, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+body.otp-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background-color: var(--gray-100);
+  font-family: "YekanBakhFaNum", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.otp-hero {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  background-size: cover;
+  background-position: center;
+}
+
+.otp-card {
+  width: 100%;
+  max-width: 420px;
+  background: #fff;
+  padding: 28px 20px;
+  border-radius: 12px;
+  box-shadow: var(--shadow-soft);
+}
+
+.otp-card__header {
+  width: 100%;
+  text-align: center;
+  border-bottom: 1px solid var(--gray-200);
+  padding-bottom: 15px;
+  margin-bottom: 25px;
+}
+
+.otp-logo {
+  display: inline-block;
+}
+
+.otp-step {
+  display: flex;
+  flex-direction: column;
+  row-gap: 12px;
+  width: 100%;
+}
+
+.otp-hidden {
+  display: none;
+}
+
+.otp-title {
+  text-align: center;
+  color: var(--gray-600);
+  font-weight: 900;
+  font-size: 24px;
+  margin: 0;
+}
+
+.otp-title--sm {
+  font-size: 22px;
+}
+
+.otp-form {
+  display: flex;
+  flex-direction: column;
+  row-gap: 12px;
+}
+
+.otp-field {
+  position: relative;
+}
+
+.otp-input-text {
+  width: 100%;
+  padding: 12px 12px;
+  background-color: #f3f4f6;
+  border: none;
+  border-radius: 12px;
+  font-size: 14px;
+  color: var(--gray-700);
+  outline: none;
+}
+
+.otp-input-text::placeholder {
+  color: #797a7b;
+}
+
+.otp-field__icon {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 14px;
+  margin: auto 0;
+  width: 18px;
+  height: 18px;
+}
+
+.otp-icon-button {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 8px;
+  margin: auto 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.otp-icon {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.otp-button {
+  width: 100%;
+  margin-top: 8px;
+  padding: 12px 0;
+  border: none;
+  border-radius: 12px;
+  background-color: var(--main-blue-100);
+  color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.otp-links {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--gray-700);
+  margin: 10px 0;
+  text-align: center;
+}
+
+.otp-link {
+  color: var(--main-blue-100);
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.otp-link--disabled:disabled {
+  color: var(--gray-400);
+  cursor: not-allowed;
+}
+
+.otp-privacy {
+  color: var(--gray-700);
+  font-weight: 300;
+  text-align: center;
+  font-size: 13px;
+  margin: 0;
+}
+
+.otp-footnote {
+  text-align: center;
+  font-size: 13px;
+  color: var(--gray-700);
+  margin: 0;
+}
+
+.otp-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.otp-row--spaced {
+  margin-top: 20px;
+}
+
+.otp-info {
+  flex: 1;
+  margin: 0 8px;
+  color: var(--gray-600);
+  font-weight: 500;
+  font-size: 14px;
+  text-align: right;
+}
+
+.otp-back {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.otp-inputs {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 20px;
+  direction: ltr;
+}
+
+.otp-input {
+  width: 3rem;
+  height: 3rem;
+  text-align: center;
+  font-size: 1.125rem;
+  font-weight: 700;
+  border: 2px solid var(--gray-200);
+  border-radius: 12px;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.otp-input:focus {
+  border-color: var(--main-blue-100);
+  transform: scale(1.05);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+}
+
+.otp-input:disabled {
+  background-color: #f3f4f6;
+  cursor: not-allowed;
+}
+
+.otp-input-error {
+  border-color: var(--red-600);
+}
+
+.otp-hidden {
+  display: none;
+}
+
+.otp-timer {
+  color: var(--gray-500);
+  font-size: 13px;
+}
+
+.otp-error {
+  color: var(--red-600);
+  font-size: 13px;
+  text-align: center;
+  margin-top: 8px;
+}
+
+#otpMsg {
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.swal-rect {
+  border-radius: 12px !important;
+}
+
+.auth-login {
+  background-image: url("../images/auth-login/login-background.jpg");
+}
+
+@media (max-width: 480px) {
+  body.otp-page {
+    padding: 16px;
+  }
+
+  .otp-card {
+    padding: 24px 16px;
+  }
+}
+
+
+body,
+button,
+input,
+select,
+textarea {
+  font-family: "YekanBakhFaNum", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+/* SweetAlert2 typography */
+.swal2-container,
+.swal2-popup,
+.swal2-title,
+.swal2-html-container,
+.swal2-confirm,
+.swal2-cancel,
+.swal2-input {
+  font-family: "YekanBakhFaNum", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+

@@ -1,0 +1,80 @@
+<?php
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+class OTP_Verifier_Script_Enqueuer
+{
+    public function setup_scripts()
+    {
+        try {
+            $settings = get_option('otp_verifier_settings', []);
+            $active_login = isset($settings['active_login']) ? (bool) $settings['active_login'] : false;
+
+            error_log("ℹ️ setup_scripts: active_login = " . ($active_login ? 'true' : 'false'));
+
+            if (!$active_login) {
+                error_log("ℹ️ setup_scripts: Login disabled, skipping script enqueue");
+                return;
+            }
+
+            if (function_exists('is_account_page') && is_account_page() && !is_user_logged_in()) {
+                add_action('wp_footer', [$this, 'enqueue_scripts_in_footer'], 5);
+                error_log("✅ setup_scripts: Scripts enqueued for account page");
+            } else {
+                error_log("ℹ️ setup_scripts: Not on account page or user logged in");
+            }
+        } catch (Exception $e) {
+            error_log("❌ setup_scripts: Exception - " . $e->getMessage());
+        }
+    }
+
+    public function enqueue_scripts_in_footer()
+    {
+        try {
+            wp_enqueue_script('jquery');
+
+            wp_enqueue_script(
+                'otp-login-script-sweetalert',
+                OTP_VERIFIER_URL . 'templates/assets/js/sweetalert2.min.js',
+                ['jquery'],
+                OTP_VERIFIER_VERSION,
+                true
+            );
+
+            wp_enqueue_script(
+                'otp-login-script',
+                OTP_VERIFIER_URL . 'templates/assets/js/auth-login.js',
+                ['jquery', 'otp-login-script-sweetalert'],
+                OTP_VERIFIER_VERSION,
+                true
+            );
+
+            $settings = get_option('otp_verifier_settings', []);
+            $expire   = isset($settings['otp_expire']) ? absint($settings['otp_expire']) : 120;
+            $otp_len  = isset($settings['otp_length']) ? absint($settings['otp_length']) : 6;
+
+            wp_localize_script('otp-login-script', 'otp_ajax', [
+                'ajaxurl'    => admin_url('admin-ajax.php'),
+                'nonce'      => wp_create_nonce('otp_login_nonce'),
+                'expire'     => $expire,
+                'otp_length' => $otp_len,
+                'assets_url' => OTP_VERIFIER_URL . 'templates/assets/',
+                'messages'   => [
+                    'invalid_phone'  => 'شماره موبایل معتبر نیست.',
+                    'otp_sent'       => 'کد تایید ارسال شد.',
+                    'otp_invalid'    => 'کد وارد شده صحیح نیست یا منقضی شده.',
+                    'otp_verified'   => 'ورود با موفقیت انجام شد!',
+                    'rate_limit'     => 'تعداد درخواست‌های شما بیش از حد است. لطفاً کمی صبر کنید.',
+                    'sms_failed'     => 'خطا در ارسال پیامک. لطفاً دوباره تلاش کنید.',
+                ]
+            ]);
+
+            wp_print_scripts(['jquery', 'otp-login-script-sweetalert', 'otp-login-script']);
+
+            error_log("✅ enqueue_scripts_in_footer: Scripts loaded successfully (expire: {$expire}s, length: {$otp_len})");
+        } catch (Exception $e) {
+            error_log("❌ enqueue_scripts_in_footer: Exception - " . $e->getMessage());
+        }
+    }
+}
