@@ -19,8 +19,7 @@ class OTP_Verifier_Script_Enqueuer
             }
 
             if (function_exists('is_account_page') && is_account_page() && !is_user_logged_in()) {
-                add_action('wp_footer', [$this, 'enqueue_scripts_in_footer'], 5);
-                error_log("✅ setup_scripts: Scripts enqueued for account page");
+                error_log("✅ setup_scripts: Using direct script tags in login template (no wp_head/wp_footer)");
             } else {
                 error_log("ℹ️ setup_scripts: Not on account page or user logged in");
             }
@@ -70,9 +69,7 @@ class OTP_Verifier_Script_Enqueuer
                 ]
             ]);
 
-            wp_print_scripts(['jquery', 'otp-login-script-sweetalert', 'otp-login-script']);
-
-            error_log("✅ enqueue_scripts_in_footer: Scripts loaded successfully (expire: {$expire}s, length: {$otp_len})");
+            error_log("✅ enqueue_scripts_in_footer: Scripts enqueued successfully (expire: {$expire}s, length: {$otp_len})");
         } catch (Exception $e) {
             error_log("❌ enqueue_scripts_in_footer: Exception - " . $e->getMessage());
         }

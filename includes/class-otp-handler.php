@@ -9,6 +9,65 @@ class OTP_Verifier_Handler
     private $max_verify_attempts = 5;
     private $repo;
 
+    private function get_wp_timezone()
+    {
+        if (function_exists('wp_timezone')) {
+            return wp_timezone();
+        }
+
+        $tz_string = get_option('timezone_string');
+        if (!empty($tz_string)) {
+            try {
+                return new DateTimeZone($tz_string);
+            } catch (Exception $e) {
+                // Ignore and fallback to gmt_offset.
+            }
+        }
+
+        $offset = (float) get_option('gmt_offset', 0);
+        $hours = (int) $offset;
+        $minutes = (int) round(abs($offset - $hours) * 60);
+        $sign = $offset >= 0 ? '+' : '-';
+        $tz_offset = sprintf('%s%02d:%02d', $sign, abs($hours), $minutes);
+
+        return new DateTimeZone($tz_offset);
+    }
+
+    private function get_wp_now_datetime()
+    {
+        return new DateTimeImmutable('now', $this->get_wp_timezone());
+    }
+
+    private function parse_wp_local_mysql_datetime($datetime_string)
+    {
+        $datetime = DateTimeImmutable::createFromFormat(
+            'Y-m-d H:i:s',
+            (string) $datetime_string,
+            $this->get_wp_timezone()
+        );
+
+        if ($datetime instanceof DateTimeImmutable) {
+            return (int) $datetime->format('U');
+        }
+
+        $fallback = strtotime((string) $datetime_string);
+        return $fallback === false ? 0 : (int) $fallback;
+    }
+
+    private function format_timestamp_for_log($timestamp)
+    {
+        $timestamp = (int) $timestamp;
+        if ($timestamp <= 0) {
+            return 'invalid';
+        }
+
+        if (function_exists('wp_date')) {
+            return wp_date('Y-m-d H:i:s', $timestamp, $this->get_wp_timezone());
+        }
+
+        return date('Y-m-d H:i:s', $timestamp);
+    }
+
     public function __construct()
     {
         global $wpdb;
@@ -83,7 +142,8 @@ class OTP_Verifier_Handler
             $max = pow(10, $length) - 1;
             $otp = wp_rand($min, $max);
 
-            $insert_result = $this->repo->insert_otp($phone_number, $otp, current_time('mysql'));
+            $created_at = $this->get_wp_now_datetime()->format('Y-m-d H:i:s');
+            $insert_result = $this->repo->insert_otp($phone_number, $otp, $created_at);
 
             if ($insert_result === false) {
                 global $wpdb;
@@ -144,12 +204,24 @@ class OTP_Verifier_Handler
             $settings = get_option('otp_verifier_settings', []);
             $expire_seconds = isset($settings['otp_expire']) ? absint($settings['otp_expire']) : 120;
 
-            $created_timestamp = strtotime($row->created_at);
-            $current_timestamp = current_time('timestamp');
+            $created_timestamp = $this->parse_wp_local_mysql_datetime($row->created_at);
+            $current_timestamp = (int) $this->get_wp_now_datetime()->format('U');
             $age_seconds = $current_timestamp - $created_timestamp;
 
-            error_log("🕐 verify_otp: Time check - Created: " . date('Y-m-d H:i:s', $created_timestamp) .
-                ", Current: " . date('Y-m-d H:i:s', $current_timestamp) .
+            if ($created_timestamp <= 0) {
+                error_log("❌ verify_otp: Invalid created_at format for OTP ID {$row->id} ({$row->created_at})");
+                $this->delete_otp($row->id);
+                error_log("======================================");
+                return false;
+            }
+
+            if ($age_seconds < 0) {
+                error_log("⚠️ verify_otp: Negative age detected ({$age_seconds}s). Clock mismatch suspected; forcing age to 0.");
+                $age_seconds = 0;
+            }
+
+            error_log("🕐 verify_otp: Time check - Created: " . $this->format_timestamp_for_log($created_timestamp) .
+                ", Current: " . $this->format_timestamp_for_log($current_timestamp) .
                 ", Age: {$age_seconds}s, Expire threshold: {$expire_seconds}s");
 
             if ($age_seconds > $expire_seconds) {
@@ -240,7 +312,8 @@ class OTP_Verifier_Handler
 
             // ✅ تغییر مهم: محاسبه زمان قطع (Cutoff) در PHP بر اساس ساعت وردپرس
             // به جای اینکه بسپاریم به MySQL، خودمان حساب می‌کنیم که "چه زمانی" مرز انقضاست
-            $cutoff_time = date('Y-m-d H:i:s', current_time('timestamp') - $expire);
+            $now = $this->get_wp_now_datetime();
+            $cutoff_time = $now->sub(new DateInterval('PT' . $expire . 'S'))->format('Y-m-d H:i:s');
 
             error_log("======================================");
             error_log("🗑️ OTP CLEANUP STARTED (Timezone Fix)");
@@ -381,7 +454,11 @@ class OTP_Verifier_Handler
         try {
             $total_codes = $this->repo->count_total();
             $verified_codes = $this->repo->count_verified();
-            $expired_codes = $this->repo->count_expired($this->get_otp_expire());
+            $expire_seconds = $this->get_otp_expire();
+            $cutoff_time = $this->get_wp_now_datetime()
+                ->sub(new DateInterval('PT' . $expire_seconds . 'S'))
+                ->format('Y-m-d H:i:s');
+            $expired_codes = $this->repo->count_expired($cutoff_time);
 
             global $wpdb;
             if ($wpdb->last_error) {

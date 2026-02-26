@@ -34,6 +34,29 @@ if (!empty($login_bg_image_url)) {
 }
 
 $body_style_attr = !empty($body_styles) ? ' style="' . esc_attr(implode(' ', $body_styles)) . '"' : '';
+
+$otp_expire = isset($settings['otp_expire']) ? absint($settings['otp_expire']) : 120;
+$otp_length = isset($settings['otp_length']) ? absint($settings['otp_length']) : 6;
+$otp_frontend_config = [
+    'ajaxurl'    => admin_url('admin-ajax.php'),
+    'nonce'      => wp_create_nonce('otp_login_nonce'),
+    'expire'     => $otp_expire,
+    'otp_length' => $otp_length,
+    'assets_url' => OTP_VERIFIER_URL . 'templates/assets/',
+    'messages'   => [
+        'invalid_phone'  => 'شماره موبایل معتبر نیست.',
+        'otp_sent'       => 'کد تایید ارسال شد.',
+        'otp_invalid'    => 'کد وارد شده صحیح نیست یا منقضی شده.',
+        'otp_verified'   => 'ورود با موفقیت انجام شد!',
+        'rate_limit'     => 'تعداد درخواست‌های شما بیش از حد است. لطفاً کمی صبر کنید.',
+        'sms_failed'     => 'خطا در ارسال پیامک. لطفاً دوباره تلاش کنید.',
+    ],
+];
+
+$otp_frontend_config_json = wp_json_encode(
+    $otp_frontend_config,
+    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+);
 ?>
 
 <!doctype html>
@@ -165,7 +188,12 @@ $body_style_attr = !empty($body_styles) ? ' style="' . esc_attr(implode(' ', $bo
 
         </div>
     </section>
-    <?php wp_footer(); ?>
+    <script src="<?php echo esc_url(includes_url('js/jquery/jquery.min.js')); ?>"></script>
+    <script src="<?php echo esc_url(OTP_VERIFIER_URL . 'templates/assets/js/sweetalert2.min.js?ver=' . OTP_VERIFIER_VERSION); ?>"></script>
+    <script>
+        window.otp_ajax = <?php echo $otp_frontend_config_json ? $otp_frontend_config_json : '{}'; ?>;
+    </script>
+    <script src="<?php echo esc_url(OTP_VERIFIER_URL . 'templates/assets/js/auth-login.js?ver=' . OTP_VERIFIER_VERSION); ?>"></script>
 
 </body>
 

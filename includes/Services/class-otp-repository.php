@@ -93,12 +93,12 @@ class OTP_Verifier_Otp_Repository
         return (int) $wpdb->get_var("SELECT COUNT(*) FROM {$this->table} WHERE verified = 1");
     }
 
-    public function count_expired($expire_seconds)
+    public function count_expired($cutoff_time)
     {
         global $wpdb;
         return (int) $wpdb->get_var($wpdb->prepare(
-            "SELECT COUNT(*) FROM {$this->table} WHERE TIMESTAMPDIFF(SECOND, created_at, NOW()) > %d",
-            $expire_seconds
+            "SELECT COUNT(*) FROM {$this->table} WHERE created_at < %s",
+            $cutoff_time
         ));
     }
 }
