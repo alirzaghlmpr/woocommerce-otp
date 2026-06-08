@@ -2,6 +2,11 @@
 (function ($) {
   "use strict";
 
+  if (!$) {
+    console.error("OTP Verifier: jQuery was not loaded before auth-login.js");
+    return;
+  }
+
   $(function () {
     // ==================== DOM Elements ====================
     const $loginStep = $("#loginStep");
@@ -34,11 +39,12 @@
     const $otpMsg = $("#otpMsg");
 
     // ==================== Settings from PHP ====================
-    const OTP_LENGTH = parseInt(otp_ajax.otp_length || 6, 10);
-    const RESEND_COOLDOWN = parseInt(otp_ajax.expire || 120, 10);
-    const AJAX_URL = otp_ajax.ajaxurl || "/wp-admin/admin-ajax.php";
-    const NONCE = otp_ajax.nonce || "";
-    const MSG = otp_ajax.messages || {};
+    const config = window.otp_ajax || {};
+    const OTP_LENGTH = parseInt(config.otp_length || 6, 10);
+    const RESEND_COOLDOWN = parseInt(config.expire || 120, 10);
+    const AJAX_URL = config.ajaxurl || "/wp-admin/admin-ajax.php";
+    const NONCE = config.nonce || "";
+    const MSG = config.messages || {};
 
     // ==================== State ====================
     let resendInterval = null;
@@ -47,7 +53,7 @@
     const MAX_VERIFY_ATTEMPTS = 5;
     let signupPayload = { username: "", password: "" };
     let lastFlow = "signup"; // signup | phone
-    const ASSETS_URL = otp_ajax.assets_url || "";
+    const ASSETS_URL = config.assets_url || "";
     const eyeOpen = ASSETS_URL + "images/svg/eye-login-page.svg";
     const eyeClosed = ASSETS_URL + "images/svg/eye-close-login-page.svg";
 
@@ -676,7 +682,7 @@
      */
     $resendBtn.on("click", function () {
       if (!lastPhone || $(this).prop("disabled")) return;
-      sendOtp(lastPhone, true);
+      sendOtp(lastPhone, lastFlow, true);
     });
 
     /**
@@ -791,4 +797,4 @@
       }
     })();
   }); // document ready
-})(jQuery);
+})(window.jQuery);
