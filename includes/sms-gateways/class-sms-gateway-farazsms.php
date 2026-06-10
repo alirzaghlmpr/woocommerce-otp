@@ -14,9 +14,9 @@ class SMS_Gateway_FarazSMS extends OTP_SMS_Gateway
      */
     public function send_sms(string $to, array $variables, string $pattern): object
     {
-        error_log("======================================");
-        error_log("📤 FARAZSMS SMS SEND STARTED");
-        error_log("======================================");
+        otp_verifier_log("======================================");
+        otp_verifier_log("📤 FARAZSMS SMS SEND STARTED");
+        otp_verifier_log("======================================");
 
         try {
             // اگر base_url تنظیم نشده، از مقدار پیش‌فرض استفاده می‌کنیم
@@ -25,12 +25,12 @@ class SMS_Gateway_FarazSMS extends OTP_SMS_Gateway
             // ساخت آرایه شماره‌های دریافت‌کننده
             $to_array = [$to];
 
-            error_log("ℹ️ FarazSMS: Endpoint - {$base_url}");
-            error_log("ℹ️ FarazSMS: To - {$to}");
-            error_log("ℹ️ FarazSMS: Pattern Code - {$pattern}");
-            error_log("ℹ️ FarazSMS: Line Number - {$this->line_number}");
-            error_log("ℹ️ FarazSMS: Variables - " . json_encode($variables));
-            error_log("ℹ️ FarazSMS: Username - " . (empty($this->username) ? "EMPTY" : "SET"));
+            otp_verifier_log("ℹ️ FarazSMS: Endpoint - {$base_url}");
+            otp_verifier_log("ℹ️ FarazSMS: To - {$to}");
+            otp_verifier_log("ℹ️ FarazSMS: Pattern Code - {$pattern}");
+            otp_verifier_log("ℹ️ FarazSMS: Line Number - {$this->line_number}");
+            otp_verifier_log("ℹ️ FarazSMS: Variables - " . json_encode($variables));
+            otp_verifier_log("ℹ️ FarazSMS: Username - " . (empty($this->username) ? "EMPTY" : "SET"));
 
             // ساخت URL با پارامترهای GET
             $url = $base_url . '?username=' . urlencode($this->username)
@@ -40,7 +40,7 @@ class SMS_Gateway_FarazSMS extends OTP_SMS_Gateway
                 . '&input_data=' . urlencode(json_encode($variables))
                 . '&pattern_code=' . urlencode($pattern);
 
-            error_log("ℹ️ FarazSMS: Request URL - " . preg_replace('/password=[^&]+/', 'password=***', $url));
+            otp_verifier_log("ℹ️ FarazSMS: Request URL - " . preg_replace('/password=[^&]+/', 'password=***', $url));
 
             // ارسال درخواست POST
             $response = wp_remote_post($url, [
@@ -54,8 +54,8 @@ class SMS_Gateway_FarazSMS extends OTP_SMS_Gateway
             // بررسی خطای وردپرس
             if (is_wp_error($response)) {
                 $error_msg = $response->get_error_message();
-                error_log("❌ FarazSMS: wp_remote_post ERROR - {$error_msg}");
-                error_log("======================================");
+                otp_verifier_log("❌ FarazSMS: wp_remote_post ERROR - {$error_msg}");
+                otp_verifier_log("======================================");
 
                 return (object)[
                     'success' => false,
@@ -69,8 +69,8 @@ class SMS_Gateway_FarazSMS extends OTP_SMS_Gateway
             $raw_body = wp_remote_retrieve_body($response);
             $raw_body = trim($raw_body);
 
-            error_log("ℹ️ FarazSMS: HTTP Status - {$http_code}");
-            error_log("ℹ️ FarazSMS: Raw Response - {$raw_body}");
+            otp_verifier_log("ℹ️ FarazSMS: HTTP Status - {$http_code}");
+            otp_verifier_log("ℹ️ FarazSMS: Raw Response - {$raw_body}");
 
             // بررسی موفقیت بر اساس ساختار response
             // اگر body فقط عدد باشد → موفق
@@ -84,16 +84,16 @@ class SMS_Gateway_FarazSMS extends OTP_SMS_Gateway
                 $success = true;
                 $code = $raw_body;
                 $message = 'پیامک با موفقیت ارسال شد';
-                error_log("✅ FarazSMS: SUCCESS (Message ID: {$code})");
+                otp_verifier_log("✅ FarazSMS: SUCCESS (Message ID: {$code})");
             } else {
                 // پاسخ متنی → خطا
                 $success = false;
                 $code = null;
                 $message = $raw_body; // متن خطا
-                error_log("❌ FarazSMS: FAILED - {$message}");
+                otp_verifier_log("❌ FarazSMS: FAILED - {$message}");
             }
 
-            error_log("======================================");
+            otp_verifier_log("======================================");
 
             return (object)[
                 'success' => $success,
@@ -102,9 +102,9 @@ class SMS_Gateway_FarazSMS extends OTP_SMS_Gateway
                 'raw_response' => $raw_body
             ];
         } catch (Exception $e) {
-            error_log("❌ FarazSMS: EXCEPTION - " . $e->getMessage());
-            error_log("❌ Stack trace: " . $e->getTraceAsString());
-            error_log("======================================");
+            otp_verifier_log("❌ FarazSMS: EXCEPTION - " . $e->getMessage());
+            otp_verifier_log("❌ Stack trace: " . $e->getTraceAsString());
+            otp_verifier_log("======================================");
 
             return (object)[
                 'success' => false,

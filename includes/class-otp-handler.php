@@ -74,24 +74,24 @@ class OTP_Verifier_Handler
         $this->table = $wpdb->prefix . 'otp_verifier_codes';
         $this->repo = new OTP_Verifier_Otp_Repository();
 
-        error_log("✅ OTP_Verifier_Handler: Initialized with table - {$this->table}");
+        otp_verifier_log("✅ OTP_Verifier_Handler: Initialized with table - {$this->table}");
 
         // ✅ راه‌اندازی WP Cron برای پاکسازی خودکار هر 10 دقیقه
-        add_action('otp_verifier_cleanup_cron', [$this, 'delete_expired_otps']);
+        add_action('otp_verifier_otp_cleanup', [$this, 'delete_expired_otps']);
 
         // ✅ ثبت Cron Schedule سفارشی (هر 10 دقیقه)
         add_filter('cron_schedules', [$this, 'add_custom_cron_schedule']);
 
-        if (!wp_next_scheduled('otp_verifier_cleanup_cron')) {
-            $scheduled = wp_schedule_event(time(), 'every_10_minutes', 'otp_verifier_cleanup_cron');
+        if (!wp_next_scheduled('otp_verifier_otp_cleanup')) {
+            $scheduled = wp_schedule_event(time(), 'every_10_minutes', 'otp_verifier_otp_cleanup');
             if ($scheduled === false) {
-                error_log("❌ OTP Cron: Failed to schedule cleanup (every 10 minutes)");
+                otp_verifier_log("❌ OTP Cron: Failed to schedule cleanup (every 10 minutes)");
             } else {
-                error_log("✅ OTP Cron: Scheduled successfully (every 10 minutes)");
+                otp_verifier_log("✅ OTP Cron: Scheduled successfully (every 10 minutes)");
             }
         } else {
-            $next_run = wp_next_scheduled('otp_verifier_cleanup_cron');
-            error_log("ℹ️ OTP Cron: Already scheduled, next run at " . date('Y-m-d H:i:s', $next_run));
+            $next_run = wp_next_scheduled('otp_verifier_otp_cleanup');
+            otp_verifier_log("ℹ️ OTP Cron: Already scheduled, next run at " . date('Y-m-d H:i:s', $next_run));
         }
     }
 
@@ -105,7 +105,7 @@ class OTP_Verifier_Handler
                 'interval' => 600, // 10 دقیقه = 600 ثانیه
                 'display'  => __('هر 10 دقیقه یکبار')
             ];
-            error_log("✅ add_custom_cron_schedule: Registered 'every_10_minutes' schedule (600s)");
+            otp_verifier_log("✅ add_custom_cron_schedule: Registered 'every_10_minutes' schedule (600s)");
         }
         return $schedules;
     }
@@ -120,11 +120,11 @@ class OTP_Verifier_Handler
             $length = isset($settings['otp_length']) ? absint($settings['otp_length']) : 6;
 
             if ($length > 6) {
-                error_log("⚠️ generate_otp: Length {$length} exceeds max, capping to 6");
+                otp_verifier_log("⚠️ generate_otp: Length {$length} exceeds max, capping to 6");
                 $length = 6;
             }
             if ($length < 4) {
-                error_log("⚠️ generate_otp: Length {$length} below min, setting to 4");
+                otp_verifier_log("⚠️ generate_otp: Length {$length} below min, setting to 4");
                 $length = 4;
             }
 
@@ -133,9 +133,9 @@ class OTP_Verifier_Handler
 
             if ($deleted === false) {
                 global $wpdb;
-                error_log("❌ generate_otp: Failed to delete old OTPs for {$phone_number} - DB Error: {$wpdb->last_error}");
+                otp_verifier_log("❌ generate_otp: Failed to delete old OTPs for " . otp_verifier_mask_phone($phone_number) . " - DB Error: {$wpdb->last_error}");
             } elseif ($deleted > 0) {
-                error_log("ℹ️ generate_otp: Deleted {$deleted} old OTP(s) for {$phone_number}");
+                otp_verifier_log("ℹ️ generate_otp: Deleted {$deleted} old OTP(s) for " . otp_verifier_mask_phone($phone_number) . "");
             }
 
             $min = pow(10, $length - 1);
@@ -143,21 +143,22 @@ class OTP_Verifier_Handler
             $otp = wp_rand($min, $max);
 
             $created_at = $this->get_wp_now_datetime()->format('Y-m-d H:i:s');
-            $insert_result = $this->repo->insert_otp($phone_number, $otp, $created_at);
+            // کد به‌صورت هش‌شده ذخیره می‌شود؛ کد خام فقط برای ارسال پیامک بازگردانده می‌شود.
+            $insert_result = $this->repo->insert_otp($phone_number, otp_verifier_hash_code($otp), $created_at);
 
             if ($insert_result === false) {
                 global $wpdb;
-                error_log("❌ generate_otp: INSERT FAILED for {$phone_number} - DB Error: {$wpdb->last_error}");
+                otp_verifier_log("❌ generate_otp: INSERT FAILED for " . otp_verifier_mask_phone($phone_number) . " - DB Error: {$wpdb->last_error}");
                 return false;
             }
 
             global $wpdb;
             $insert_id = $wpdb->insert_id;
-            error_log("✅ generate_otp: SUCCESS - Phone: {$phone_number}, Code: {$otp}, Length: {$length}, Insert ID: {$insert_id}");
+            otp_verifier_log("✅ generate_otp: SUCCESS - Phone: " . otp_verifier_mask_phone($phone_number) . ", Length: {$length}, Insert ID: {$insert_id}");
 
             return $otp;
         } catch (Exception $e) {
-            error_log("❌ generate_otp: EXCEPTION - " . $e->getMessage());
+            otp_verifier_log("❌ generate_otp: EXCEPTION - " . $e->getMessage());
             return false;
         }
     }
@@ -167,36 +168,36 @@ class OTP_Verifier_Handler
      */
     public function verify_otp($phone_number, $otp)
     {
-        error_log("======================================");
-        error_log("🔍 OTP VERIFICATION STARTED");
-        error_log("======================================");
-        error_log("ℹ️ verify_otp: Phone: {$phone_number}, Entered OTP: {$otp}");
+        otp_verifier_log("======================================");
+        otp_verifier_log("🔍 OTP VERIFICATION STARTED");
+        otp_verifier_log("======================================");
+        otp_verifier_log("ℹ️ verify_otp: Phone: " . otp_verifier_mask_phone($phone_number));
 
         try {
             // ✅ پاکسازی کدهای منقضی قبل از بررسی
             $cleaned = $this->delete_expired_otps();
-            error_log("ℹ️ verify_otp: Pre-verification cleanup removed {$cleaned} expired OTP(s)");
+            otp_verifier_log("ℹ️ verify_otp: Pre-verification cleanup removed {$cleaned} expired OTP(s)");
 
             $row = $this->repo->get_latest_unverified($phone_number);
 
             global $wpdb;
             if ($wpdb->last_error) {
-                error_log("❌ verify_otp: Database error in SELECT - {$wpdb->last_error}");
+                otp_verifier_log("❌ verify_otp: Database error in SELECT - {$wpdb->last_error}");
             }
 
             if (!$row) {
-                error_log("❌ verify_otp: No active OTP found for {$phone_number}");
-                error_log("======================================");
+                otp_verifier_log("❌ verify_otp: No active OTP found for " . otp_verifier_mask_phone($phone_number) . "");
+                otp_verifier_log("======================================");
                 return false;
             }
 
-            error_log("✅ verify_otp: Found OTP record - ID: {$row->id}, Code: {$row->code}, Created: {$row->created_at}, Attempts: {$row->attempt_count}/{$this->max_verify_attempts}");
+            otp_verifier_log("✅ verify_otp: Found OTP record - ID: {$row->id}, Created: {$row->created_at}, Attempts: {$row->attempt_count}/{$this->max_verify_attempts}");
 
             // ✅ بررسی تعداد تلاش‌های اشتباه
             if ($row->attempt_count >= $this->max_verify_attempts) {
-                error_log("❌ verify_otp: Max attempts reached ({$this->max_verify_attempts}) for {$phone_number} - Deleting OTP");
+                otp_verifier_log("❌ verify_otp: Max attempts reached ({$this->max_verify_attempts}) for " . otp_verifier_mask_phone($phone_number) . " - Deleting OTP");
                 $this->delete_otp($row->id);
-                error_log("======================================");
+                otp_verifier_log("======================================");
                 return false;
             }
 
@@ -209,63 +210,63 @@ class OTP_Verifier_Handler
             $age_seconds = $current_timestamp - $created_timestamp;
 
             if ($created_timestamp <= 0) {
-                error_log("❌ verify_otp: Invalid created_at format for OTP ID {$row->id} ({$row->created_at})");
+                otp_verifier_log("❌ verify_otp: Invalid created_at format for OTP ID {$row->id} ({$row->created_at})");
                 $this->delete_otp($row->id);
-                error_log("======================================");
+                otp_verifier_log("======================================");
                 return false;
             }
 
             if ($age_seconds < 0) {
-                error_log("⚠️ verify_otp: Negative age detected ({$age_seconds}s). Clock mismatch suspected; forcing age to 0.");
+                otp_verifier_log("⚠️ verify_otp: Negative age detected ({$age_seconds}s). Clock mismatch suspected; forcing age to 0.");
                 $age_seconds = 0;
             }
 
-            error_log("🕐 verify_otp: Time check - Created: " . $this->format_timestamp_for_log($created_timestamp) .
+            otp_verifier_log("🕐 verify_otp: Time check - Created: " . $this->format_timestamp_for_log($created_timestamp) .
                 ", Current: " . $this->format_timestamp_for_log($current_timestamp) .
                 ", Age: {$age_seconds}s, Expire threshold: {$expire_seconds}s");
 
             if ($age_seconds > $expire_seconds) {
-                error_log("❌ verify_otp: OTP EXPIRED - Age {$age_seconds}s > Threshold {$expire_seconds}s for {$phone_number}");
+                otp_verifier_log("❌ verify_otp: OTP EXPIRED - Age {$age_seconds}s > Threshold {$expire_seconds}s for " . otp_verifier_mask_phone($phone_number) . "");
                 $this->delete_otp($row->id);
-                error_log("======================================");
+                otp_verifier_log("======================================");
                 return false;
             }
 
-            // ✅ بررسی صحت کد
-            if ($row->code !== $otp) {
+            // ✅ بررسی صحت کد (مقایسه‌ی هش‌شده و مقاوم در برابر حملات زمان‌سنجی)
+            if (!hash_equals((string) $row->code, otp_verifier_hash_code($otp))) {
                 $new_attempts = $row->attempt_count + 1;
                 $remaining = $this->max_verify_attempts - $new_attempts;
 
                 $update_result = $this->repo->update_attempt_count($row->id, $new_attempts);
 
                 if ($update_result === false) {
-                    error_log("❌ verify_otp: Failed to update attempt_count - DB Error: {$wpdb->last_error}");
+                    otp_verifier_log("❌ verify_otp: Failed to update attempt_count - DB Error: {$wpdb->last_error}");
                 } else {
-                    error_log("ℹ️ verify_otp: Updated attempt_count to {$new_attempts}");
+                    otp_verifier_log("ℹ️ verify_otp: Updated attempt_count to {$new_attempts}");
                 }
 
-                error_log("❌ verify_otp: WRONG CODE - Expected: {$row->code}, Got: {$otp}, Attempts: {$new_attempts}/{$this->max_verify_attempts}, Remaining: {$remaining}");
+                otp_verifier_log("❌ verify_otp: WRONG CODE - Attempts: {$new_attempts}/{$this->max_verify_attempts}, Remaining: {$remaining}");
 
                 // ✅ اگه به حداکثر رسید، حذفش کن
                 if ($new_attempts >= $this->max_verify_attempts) {
-                    error_log("🗑️ verify_otp: Max attempts reached after wrong code - Deleting OTP ID: {$row->id}");
+                    otp_verifier_log("🗑️ verify_otp: Max attempts reached after wrong code - Deleting OTP ID: {$row->id}");
                     $this->delete_otp($row->id);
                 }
 
-                error_log("======================================");
+                otp_verifier_log("======================================");
                 return false;
             }
 
             // ✅ موفق - حذف OTP
             $this->delete_otp($row->id);
-            error_log("✅ verify_otp: OTP VERIFIED SUCCESSFULLY - Phone: {$phone_number}, Code: {$otp}");
-            error_log("======================================");
+            otp_verifier_log("✅ verify_otp: OTP VERIFIED SUCCESSFULLY - Phone: " . otp_verifier_mask_phone($phone_number));
+            otp_verifier_log("======================================");
 
             return true;
         } catch (Exception $e) {
-            error_log("❌ verify_otp: EXCEPTION - " . $e->getMessage());
-            error_log("❌ Stack trace: " . $e->getTraceAsString());
-            error_log("======================================");
+            otp_verifier_log("❌ verify_otp: EXCEPTION - " . $e->getMessage());
+            otp_verifier_log("❌ Stack trace: " . $e->getTraceAsString());
+            otp_verifier_log("======================================");
             return false;
         }
     }
@@ -280,19 +281,19 @@ class OTP_Verifier_Handler
 
             if ($deleted === false) {
                 global $wpdb;
-                error_log("❌ delete_otp: Failed to delete OTP ID: {$id} - DB Error: {$wpdb->last_error}");
+                otp_verifier_log("❌ delete_otp: Failed to delete OTP ID: {$id} - DB Error: {$wpdb->last_error}");
                 return false;
             }
 
             if ($deleted > 0) {
-                error_log("🗑️ delete_otp: Successfully deleted OTP ID: {$id}");
+                otp_verifier_log("🗑️ delete_otp: Successfully deleted OTP ID: {$id}");
             } else {
-                error_log("⚠️ delete_otp: No OTP found with ID: {$id} (already deleted?)");
+                otp_verifier_log("⚠️ delete_otp: No OTP found with ID: {$id} (already deleted?)");
             }
 
             return $deleted;
         } catch (Exception $e) {
-            error_log("❌ delete_otp: EXCEPTION - " . $e->getMessage());
+            otp_verifier_log("❌ delete_otp: EXCEPTION - " . $e->getMessage());
             return false;
         }
     }
@@ -315,11 +316,11 @@ class OTP_Verifier_Handler
             $now = $this->get_wp_now_datetime();
             $cutoff_time = $now->sub(new DateInterval('PT' . $expire . 'S'))->format('Y-m-d H:i:s');
 
-            error_log("======================================");
-            error_log("🗑️ OTP CLEANUP STARTED (Timezone Fix)");
-            error_log("======================================");
-            error_log("ℹ️ delete_expired_otps: Expire threshold: {$expire}s");
-            error_log("ℹ️ delete_expired_otps: Deleting codes created before: {$cutoff_time}");
+            otp_verifier_log("======================================");
+            otp_verifier_log("🗑️ OTP CLEANUP STARTED (Timezone Fix)");
+            otp_verifier_log("======================================");
+            otp_verifier_log("ℹ️ delete_expired_otps: Expire threshold: {$expire}s");
+            otp_verifier_log("ℹ️ delete_expired_otps: Deleting codes created before: {$cutoff_time}");
 
             // ✅ پیدا کردن کدهای منقضی (شرط ساده‌تر: created_at کوچکتر از زمان cutoff)
             // دستور TIMESTAMPDIFF رو حذف کردیم چون باعث تداخل میشه
@@ -332,32 +333,32 @@ class OTP_Verifier_Handler
             ));
 
             if ($wpdb->last_error) {
-                error_log("❌ delete_expired_otps: Database error in SELECT - {$wpdb->last_error}");
+                otp_verifier_log("❌ delete_expired_otps: Database error in SELECT - {$wpdb->last_error}");
             }
 
             if (empty($expired_rows)) {
-                error_log("ℹ️ delete_expired_otps: No expired codes found");
-                error_log("======================================");
+                otp_verifier_log("ℹ️ delete_expired_otps: No expired codes found");
+                otp_verifier_log("======================================");
                 return 0;
             }
 
-            error_log("🗑️ delete_expired_otps: Found " . count($expired_rows) . " expired OTP(s)");
+            otp_verifier_log("🗑️ delete_expired_otps: Found " . count($expired_rows) . " expired OTP(s)");
 
             // ✅ حذف دسته‌جمعی با شرط زمانی PHP
             $deleted = $this->repo->delete_expired_before($cutoff_time);
 
             if ($deleted === false) {
-                error_log("❌ delete_expired_otps: Failed to delete expired OTPs - DB Error: {$wpdb->last_error}");
-                error_log("======================================");
+                otp_verifier_log("❌ delete_expired_otps: Failed to delete expired OTPs - DB Error: {$wpdb->last_error}");
+                otp_verifier_log("======================================");
                 return 0;
             }
 
-            error_log("✅ delete_expired_otps: COMPLETE - {$deleted} expired code(s) deleted");
-            error_log("======================================");
+            otp_verifier_log("✅ delete_expired_otps: COMPLETE - {$deleted} expired code(s) deleted");
+            otp_verifier_log("======================================");
 
             return $deleted;
         } catch (Exception $e) {
-            error_log("❌ delete_expired_otps: EXCEPTION - " . $e->getMessage());
+            otp_verifier_log("❌ delete_expired_otps: EXCEPTION - " . $e->getMessage());
             return 0;
         }
     }
@@ -372,19 +373,19 @@ class OTP_Verifier_Handler
 
             if ($deleted === false) {
                 global $wpdb;
-                error_log("❌ delete_user_otps: Failed to delete OTPs for {$phone_number} - DB Error: {$wpdb->last_error}");
+                otp_verifier_log("❌ delete_user_otps: Failed to delete OTPs for " . otp_verifier_mask_phone($phone_number) . " - DB Error: {$wpdb->last_error}");
                 return false;
             }
 
             if ($deleted > 0) {
-                error_log("🗑️ delete_user_otps: Deleted {$deleted} OTP(s) for {$phone_number}");
+                otp_verifier_log("🗑️ delete_user_otps: Deleted {$deleted} OTP(s) for " . otp_verifier_mask_phone($phone_number) . "");
             } else {
-                error_log("ℹ️ delete_user_otps: No OTPs found for {$phone_number}");
+                otp_verifier_log("ℹ️ delete_user_otps: No OTPs found for " . otp_verifier_mask_phone($phone_number) . "");
             }
 
             return $deleted;
         } catch (Exception $e) {
-            error_log("❌ delete_user_otps: EXCEPTION - " . $e->getMessage());
+            otp_verifier_log("❌ delete_user_otps: EXCEPTION - " . $e->getMessage());
             return false;
         }
     }
@@ -396,7 +397,7 @@ class OTP_Verifier_Handler
         $final_length = min(max($length, 4), 6);
 
         if ($length !== $final_length) {
-            error_log("ℹ️ get_otp_length: Adjusted from {$length} to {$final_length} (range: 4-6)");
+            otp_verifier_log("ℹ️ get_otp_length: Adjusted from {$length} to {$final_length} (range: 4-6)");
         }
 
         return $final_length;
@@ -406,7 +407,7 @@ class OTP_Verifier_Handler
     {
         $settings = get_option('otp_verifier_settings', []);
         $expire = isset($settings['otp_expire']) ? absint($settings['otp_expire']) : 120;
-        error_log("ℹ️ get_otp_expire: {$expire} seconds");
+        otp_verifier_log("ℹ️ get_otp_expire: {$expire} seconds");
         return $expire;
     }
 
@@ -421,20 +422,20 @@ class OTP_Verifier_Handler
             $attempt_count = $this->repo->get_attempt_count($phone_number);
             global $wpdb;
             if ($wpdb->last_error) {
-                error_log("❌ get_remaining_attempts: Database error - {$wpdb->last_error}");
+                otp_verifier_log("❌ get_remaining_attempts: Database error - {$wpdb->last_error}");
             }
 
             if ($attempt_count === null) {
-                error_log("ℹ️ get_remaining_attempts: No active OTP for {$phone_number}, returning max attempts ({$this->max_verify_attempts})");
+                otp_verifier_log("ℹ️ get_remaining_attempts: No active OTP for " . otp_verifier_mask_phone($phone_number) . ", returning max attempts ({$this->max_verify_attempts})");
                 return $this->max_verify_attempts;
             }
 
             $remaining = max(0, $this->max_verify_attempts - $attempt_count);
-            error_log("ℹ️ get_remaining_attempts: Phone {$phone_number} has {$remaining} attempts remaining (used: {$attempt_count}/{$this->max_verify_attempts})");
+            otp_verifier_log("ℹ️ get_remaining_attempts: Phone " . otp_verifier_mask_phone($phone_number) . " has {$remaining} attempts remaining (used: {$attempt_count}/{$this->max_verify_attempts})");
 
             return $remaining;
         } catch (Exception $e) {
-            error_log("❌ get_remaining_attempts: EXCEPTION - " . $e->getMessage());
+            otp_verifier_log("❌ get_remaining_attempts: EXCEPTION - " . $e->getMessage());
             return $this->max_verify_attempts;
         }
     }
@@ -444,7 +445,7 @@ class OTP_Verifier_Handler
         $remaining = $this->get_remaining_attempts($phone_number);
         $can_attempt = $remaining > 0;
 
-        error_log("ℹ️ can_attempt: Phone {$phone_number} - " . ($can_attempt ? "CAN attempt ({$remaining} left)" : "CANNOT attempt (0 left)"));
+        otp_verifier_log("ℹ️ can_attempt: Phone " . otp_verifier_mask_phone($phone_number) . " - " . ($can_attempt ? "CAN attempt ({$remaining} left)" : "CANNOT attempt (0 left)"));
 
         return $can_attempt;
     }
@@ -462,7 +463,7 @@ class OTP_Verifier_Handler
 
             global $wpdb;
             if ($wpdb->last_error) {
-                error_log("❌ get_statistics: Database error - {$wpdb->last_error}");
+                otp_verifier_log("❌ get_statistics: Database error - {$wpdb->last_error}");
             }
 
             $stats = [
@@ -472,11 +473,11 @@ class OTP_Verifier_Handler
                 'active' => max(0, (int) $total_codes - (int) $expired_codes)
             ];
 
-            error_log("📊 get_statistics: Total={$stats['total']}, Verified={$stats['verified']}, Expired={$stats['expired']}, Active={$stats['active']}");
+            otp_verifier_log("📊 get_statistics: Total={$stats['total']}, Verified={$stats['verified']}, Expired={$stats['expired']}, Active={$stats['active']}");
 
             return $stats;
         } catch (Exception $e) {
-            error_log("❌ get_statistics: EXCEPTION - " . $e->getMessage());
+            otp_verifier_log("❌ get_statistics: EXCEPTION - " . $e->getMessage());
             return [
                 'total' => 0,
                 'verified' => 0,
@@ -491,22 +492,21 @@ class OTP_Verifier_Handler
      */
     public static function cleanup_cron()
     {
-        try {
-            $timestamp = wp_next_scheduled('otp_verifier_cleanup_cron');
+        // پاکسازی همه‌ی هوک‌های کرون افزونه (شامل نام قدیمی برای نصب‌های ارتقا یافته)
+        $hooks = [
+            'otp_verifier_otp_cleanup',
+            'otp_verifier_transient_cleanup',
+            'otp_verifier_cleanup_cron', // legacy
+        ];
 
-            if ($timestamp) {
-                $unscheduled = wp_unschedule_event($timestamp, 'otp_verifier_cleanup_cron');
-
-                if ($unscheduled) {
-                    error_log("✅ cleanup_cron: OTP Cron unscheduled successfully (was scheduled for " . date('Y-m-d H:i:s', $timestamp) . ")");
-                } else {
-                    error_log("❌ cleanup_cron: Failed to unschedule OTP Cron");
-                }
-            } else {
-                error_log("ℹ️ cleanup_cron: No OTP Cron was scheduled");
+        foreach ($hooks as $hook) {
+            try {
+                // wp_clear_scheduled_hook همه‌ی رخدادهای برنامه‌ریزی‌شده‌ی یک هوک را پاک می‌کند
+                $cleared = wp_clear_scheduled_hook($hook);
+                otp_verifier_log("ℹ️ cleanup_cron: Cleared {$cleared} scheduled event(s) for hook '{$hook}'");
+            } catch (Exception $e) {
+                otp_verifier_log("❌ cleanup_cron: EXCEPTION clearing '{$hook}' - " . $e->getMessage());
             }
-        } catch (Exception $e) {
-            error_log("❌ cleanup_cron: EXCEPTION - " . $e->getMessage());
         }
     }
 
@@ -520,12 +520,12 @@ class OTP_Verifier_Handler
             $result = $wpdb->query("DROP TABLE IF EXISTS $table_name");
 
             if ($result === false) {
-                error_log("❌ drop_table: Failed to drop table {$table_name} - DB Error: {$wpdb->last_error}");
+                otp_verifier_log("❌ drop_table: Failed to drop table {$table_name} - DB Error: {$wpdb->last_error}");
             } else {
-                error_log("✅ drop_table: Table {$table_name} dropped successfully");
+                otp_verifier_log("✅ drop_table: Table {$table_name} dropped successfully");
             }
         } catch (Exception $e) {
-            error_log("❌ drop_table: EXCEPTION - " . $e->getMessage());
+            otp_verifier_log("❌ drop_table: EXCEPTION - " . $e->getMessage());
         }
     }
 }

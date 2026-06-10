@@ -4,7 +4,7 @@
  * Plugin Name: OTP Verifier
  * Plugin URI:  https://webioo.ir/
  * Description: ورود و ثبت‌نام با شماره تلفن و کد تایید (OTP) برای ووکامرس
- * Version:     1.0.0
+ * Version:     1.1.0
  * Author:      alireza gholampour
  * Text Domain: otp-verifier
  */
@@ -16,13 +16,14 @@ if (! defined('ABSPATH')) {
 /**
  * 🔹 تعریف ثابت‌های پایه
  */
-define('OTP_VERIFIER_VERSION', '1.0.0');
+define('OTP_VERIFIER_VERSION', '1.1.0');
 define('OTP_VERIFIER_PATH', plugin_dir_path(__FILE__));
 define('OTP_VERIFIER_URL', plugin_dir_url(__FILE__));
 
 /**
  * 🔹 لود فایل‌های مورد نیاز
  */
+require_once OTP_VERIFIER_PATH . 'includes/otp-verifier-helpers.php';
 require_once OTP_VERIFIER_PATH . 'includes/class-otp-verifier-activator.php';
 require_once OTP_VERIFIER_PATH . 'includes/class-otp-verifier-deactivator.php';
 require_once OTP_VERIFIER_PATH . 'includes/class-otp-verifier.php';
@@ -44,6 +45,11 @@ function otp_verifier_deactivate()
     OTP_Verifier_Deactivator::deactivate();
 }
 register_deactivation_hook(__FILE__, 'otp_verifier_deactivate');
+
+/**
+ * 🔹 مهاجرت ساختار دیتابیس هنگام به‌روزرسانی افزونه بدون فعال‌سازی مجدد
+ */
+add_action('admin_init', ['OTP_Verifier_Activator', 'maybe_upgrade']);
 
 /**
  * 🔹 اجرای افزونه

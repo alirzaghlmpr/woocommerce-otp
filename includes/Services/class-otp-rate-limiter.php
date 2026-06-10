@@ -18,10 +18,12 @@ class OTP_Verifier_Rate_Limiter
                 ];
                 $result = set_transient($transient_key, $data, 5 * MINUTE_IN_SECONDS);
                 if (!$result) {
-                    error_log("❌ check_rate_limit: Failed to set transient for {$phone}");
-                    return true;
+                    // Fail-closed: اگر نتوانیم شمارنده را ذخیره کنیم، اجازه نمی‌دهیم
+                    // تا محدودیت با خراب کردن عمدی transient دور زده نشود.
+                    otp_verifier_log("❌ check_rate_limit: Failed to set transient for " . otp_verifier_mask_phone($phone) . " - denying request (fail-closed)");
+                    return false;
                 }
-                error_log("✅ Rate Limit: First attempt for {$phone} (Key: {$transient_key})");
+                otp_verifier_log("✅ Rate Limit: First attempt for " . otp_verifier_mask_phone($phone));
                 return true;
             }
 
@@ -36,14 +38,14 @@ class OTP_Verifier_Rate_Limiter
                     'first_attempt_time' => time()
                 ];
                 set_transient($transient_key, $data, 5 * MINUTE_IN_SECONDS);
-                error_log("✅ Rate Limit: Time expired, reset for {$phone}");
+                otp_verifier_log("✅ Rate Limit: Time expired, reset for " . otp_verifier_mask_phone($phone) . "");
                 return true;
             }
 
             if ($attempts >= 3) {
                 $remaining_time = (5 * MINUTE_IN_SECONDS) - $elapsed_time;
                 $remaining_minutes = ceil($remaining_time / 60);
-                error_log("❌ Rate Limit: BLOCKED {$phone} (Attempts: {$attempts}/3, Remaining: {$remaining_minutes} min, Key: {$transient_key})");
+                otp_verifier_log("❌ Rate Limit: BLOCKED " . otp_verifier_mask_phone($phone) . " (Attempts: {$attempts}/3, Remaining: {$remaining_minutes} min)");
                 return false;
             }
 
@@ -56,14 +58,17 @@ class OTP_Verifier_Rate_Limiter
             $result = set_transient($transient_key, $data, $remaining_time);
 
             if (!$result) {
-                error_log("⚠️ check_rate_limit: Failed to update transient for {$phone}");
+                // Fail-closed: اگر افزایش شمارنده ذخیره نشود، درخواست را رد می‌کنیم.
+                otp_verifier_log("⚠️ check_rate_limit: Failed to update transient for " . otp_verifier_mask_phone($phone) . " - denying request (fail-closed)");
+                return false;
             }
 
-            error_log("✅ Rate Limit: Attempt " . ($attempts + 1) . "/3 for {$phone} (Elapsed: {$elapsed_time}s, Key: {$transient_key})");
+            otp_verifier_log("✅ Rate Limit: Attempt " . ($attempts + 1) . "/3 for " . otp_verifier_mask_phone($phone) . " (Elapsed: {$elapsed_time}s)");
             return true;
         } catch (Exception $e) {
-            error_log("❌ check_rate_limit: Exception - " . $e->getMessage());
-            return true;
+            // Fail-closed روی خطا برای جلوگیری از دور زدن محدودیت نرخ.
+            otp_verifier_log("❌ check_rate_limit: Exception - " . $e->getMessage());
+            return false;
         }
     }
 
@@ -72,7 +77,7 @@ class OTP_Verifier_Rate_Limiter
         try {
             $ip = $_SERVER['REMOTE_ADDR'] ?? '';
             if (empty($ip)) {
-                error_log("⚠️ IP Rate Limit: No IP detected, allowing request");
+                otp_verifier_log("⚠️ IP Rate Limit: No IP detected, allowing request");
                 return true;
             }
 
@@ -86,10 +91,11 @@ class OTP_Verifier_Rate_Limiter
                 ];
                 $result = set_transient($transient_key, $data, 5 * MINUTE_IN_SECONDS);
                 if (!$result) {
-                    error_log("❌ check_ip_rate_limit: Failed to set transient for {$ip}");
-                    return true;
+                    // Fail-closed: عدم امکان ذخیره‌ی شمارنده نباید به معنای عبور آزاد باشد.
+                    otp_verifier_log("❌ check_ip_rate_limit: Failed to set transient for {$ip} - denying request (fail-closed)");
+                    return false;
                 }
-                error_log("✅ IP Rate Limit: First attempt from {$ip} (Key: {$transient_key})");
+                otp_verifier_log("✅ IP Rate Limit: First attempt from {$ip}");
                 return true;
             }
 
@@ -104,14 +110,14 @@ class OTP_Verifier_Rate_Limiter
                     'first_attempt_time' => time()
                 ];
                 set_transient($transient_key, $data, 5 * MINUTE_IN_SECONDS);
-                error_log("✅ IP Rate Limit: Time expired, reset for {$ip}");
+                otp_verifier_log("✅ IP Rate Limit: Time expired, reset for {$ip}");
                 return true;
             }
 
             if ($attempts >= 10) {
                 $remaining_time = (5 * MINUTE_IN_SECONDS) - $elapsed_time;
                 $remaining_minutes = ceil($remaining_time / 60);
-                error_log("❌ IP Rate Limit: BLOCKED {$ip} (Attempts: {$attempts}/10, Remaining: {$remaining_minutes} min, Key: {$transient_key})");
+                otp_verifier_log("❌ IP Rate Limit: BLOCKED {$ip} (Attempts: {$attempts}/10, Remaining: {$remaining_minutes} min, Key: {$transient_key})");
                 return false;
             }
 
@@ -124,14 +130,17 @@ class OTP_Verifier_Rate_Limiter
             $result = set_transient($transient_key, $data, $remaining_time);
 
             if (!$result) {
-                error_log("⚠️ check_ip_rate_limit: Failed to update transient for {$ip}");
+                // Fail-closed: اگر افزایش شمارنده ذخیره نشود، درخواست را رد می‌کنیم.
+                otp_verifier_log("⚠️ check_ip_rate_limit: Failed to update transient for {$ip} - denying request (fail-closed)");
+                return false;
             }
 
-            error_log("✅ IP Rate Limit: Attempt " . ($attempts + 1) . "/10 from {$ip} (Elapsed: {$elapsed_time}s, Key: {$transient_key})");
+            otp_verifier_log("✅ IP Rate Limit: Attempt " . ($attempts + 1) . "/10 from {$ip} (Elapsed: {$elapsed_time}s)");
             return true;
         } catch (Exception $e) {
-            error_log("❌ check_ip_rate_limit: Exception - " . $e->getMessage());
-            return true;
+            // Fail-closed روی خطا برای جلوگیری از دور زدن محدودیت نرخ.
+            otp_verifier_log("❌ check_ip_rate_limit: Exception - " . $e->getMessage());
+            return false;
         }
     }
 
@@ -140,13 +149,13 @@ class OTP_Verifier_Rate_Limiter
         try {
             $transient_key = 'otp_rate_limit_' . md5($phone);
             if (delete_transient($transient_key)) {
-                error_log("✅ clear_phone_rate_limit: Cleared for {$phone} (Key: {$transient_key})");
+                otp_verifier_log("✅ clear_phone_rate_limit: Cleared for " . otp_verifier_mask_phone($phone) . " (Key: {$transient_key})");
                 return true;
             }
-            error_log("⚠️ clear_phone_rate_limit: Nothing to clear for {$phone} (Key: {$transient_key})");
+            otp_verifier_log("⚠️ clear_phone_rate_limit: Nothing to clear for " . otp_verifier_mask_phone($phone) . " (Key: {$transient_key})");
             return false;
         } catch (Exception $e) {
-            error_log("❌ clear_phone_rate_limit: Exception - " . $e->getMessage());
+            otp_verifier_log("❌ clear_phone_rate_limit: Exception - " . $e->getMessage());
             return false;
         }
     }
@@ -156,13 +165,13 @@ class OTP_Verifier_Rate_Limiter
         try {
             $transient_key = 'otp_ip_limit_' . md5($ip);
             if (delete_transient($transient_key)) {
-                error_log("✅ clear_ip_rate_limit: Cleared for {$ip} (Key: {$transient_key})");
+                otp_verifier_log("✅ clear_ip_rate_limit: Cleared for {$ip} (Key: {$transient_key})");
                 return true;
             }
-            error_log("⚠️ clear_ip_rate_limit: Nothing to clear for {$ip} (Key: {$transient_key})");
+            otp_verifier_log("⚠️ clear_ip_rate_limit: Nothing to clear for {$ip} (Key: {$transient_key})");
             return false;
         } catch (Exception $e) {
-            error_log("❌ clear_ip_rate_limit: Exception - " . $e->getMessage());
+            otp_verifier_log("❌ clear_ip_rate_limit: Exception - " . $e->getMessage());
             return false;
         }
     }
@@ -172,9 +181,9 @@ class OTP_Verifier_Rate_Limiter
         global $wpdb;
 
         try {
-            error_log("======================================");
-            error_log("🧹 TRANSIENT CLEANUP STARTED");
-            error_log("======================================");
+            otp_verifier_log("======================================");
+            otp_verifier_log("🧹 TRANSIENT CLEANUP STARTED");
+            otp_verifier_log("======================================");
 
             $deleted_timeouts = $wpdb->query(
                 "DELETE FROM {$wpdb->options}
@@ -183,9 +192,9 @@ class OTP_Verifier_Rate_Limiter
             );
 
             if ($deleted_timeouts === false) {
-                error_log("❌ Transient Cleanup: Database error in deleting timeouts - " . $wpdb->last_error);
+                otp_verifier_log("❌ Transient Cleanup: Database error in deleting timeouts - " . $wpdb->last_error);
             } else {
-                error_log("✅ Transient Cleanup: {$deleted_timeouts} timeout entries deleted");
+                otp_verifier_log("✅ Transient Cleanup: {$deleted_timeouts} timeout entries deleted");
             }
 
             $deleted_orphans = $wpdb->query(
@@ -199,16 +208,16 @@ class OTP_Verifier_Rate_Limiter
             );
 
             if ($deleted_orphans === false) {
-                error_log("❌ Transient Cleanup: Database error in deleting orphans - " . $wpdb->last_error);
+                otp_verifier_log("❌ Transient Cleanup: Database error in deleting orphans - " . $wpdb->last_error);
             } else {
-                error_log("✅ Transient Cleanup: {$deleted_orphans} orphan entries deleted");
+                otp_verifier_log("✅ Transient Cleanup: {$deleted_orphans} orphan entries deleted");
             }
 
-            error_log("======================================");
-            error_log("✅ TRANSIENT CLEANUP FINISHED");
-            error_log("======================================");
+            otp_verifier_log("======================================");
+            otp_verifier_log("✅ TRANSIENT CLEANUP FINISHED");
+            otp_verifier_log("======================================");
         } catch (Exception $e) {
-            error_log("❌ cleanup_expired_transients: Exception - " . $e->getMessage());
+            otp_verifier_log("❌ cleanup_expired_transients: Exception - " . $e->getMessage());
         }
     }
 }

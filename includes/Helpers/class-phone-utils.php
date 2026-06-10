@@ -11,7 +11,7 @@ class OTP_Verifier_Phone_Util
         $phone = preg_replace('/[^0-9]/', '', (string) $phone);
 
         if (!preg_match('/^09[0-9]{9}$/', $phone)) {
-            error_log("❌ sanitize_iranian_phone: Invalid format - Original: {$original}, Cleaned: {$phone}");
+            otp_verifier_log("❌ sanitize_iranian_phone: Invalid format - Original: {$original}, Cleaned: {$phone}");
             return false;
         }
 

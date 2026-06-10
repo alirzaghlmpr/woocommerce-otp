@@ -15,19 +15,19 @@ class SMS_Gateway_MeliPayamak extends OTP_SMS_Gateway
      */
     public function send_sms(string $to, array $variables, string $pattern): object
     {
-        error_log("======================================");
-        error_log("📤 MELIPAYAMAK SMS SEND STARTED");
-        error_log("======================================");
+        otp_verifier_log("======================================");
+        otp_verifier_log("📤 MELIPAYAMAK SMS SEND STARTED");
+        otp_verifier_log("======================================");
 
         try {
             $endpoint = $this->base_url ?: 'https://rest.payamak-panel.com/api/SendSMS/BaseServiceNumber';
             $text = implode(';', $variables);
 
-            error_log("ℹ️ MeliPayamak: Endpoint - {$endpoint}");
-            error_log("ℹ️ MeliPayamak: To - {$to}");
-            error_log("ℹ️ MeliPayamak: Pattern (bodyId) - {$pattern}");
-            error_log("ℹ️ MeliPayamak: Text - {$text}");
-            error_log("ℹ️ MeliPayamak: Username - " . (empty($this->username) ? "EMPTY" : "SET"));
+            otp_verifier_log("ℹ️ MeliPayamak: Endpoint - {$endpoint}");
+            otp_verifier_log("ℹ️ MeliPayamak: To - {$to}");
+            otp_verifier_log("ℹ️ MeliPayamak: Pattern (bodyId) - {$pattern}");
+            otp_verifier_log("ℹ️ MeliPayamak: Text - {$text}");
+            otp_verifier_log("ℹ️ MeliPayamak: Username - " . (empty($this->username) ? "EMPTY" : "SET"));
 
             $body = [
                 'username' => $this->username,
@@ -47,8 +47,8 @@ class SMS_Gateway_MeliPayamak extends OTP_SMS_Gateway
 
             if (is_wp_error($response)) {
                 $error_msg = $response->get_error_message();
-                error_log("❌ MeliPayamak: wp_remote_post ERROR - {$error_msg}");
-                error_log("======================================");
+                otp_verifier_log("❌ MeliPayamak: wp_remote_post ERROR - {$error_msg}");
+                otp_verifier_log("======================================");
 
                 return (object)[
                     'success' => false,
@@ -62,16 +62,16 @@ class SMS_Gateway_MeliPayamak extends OTP_SMS_Gateway
             $raw_body = wp_remote_retrieve_body($response);
             $raw_body = trim($raw_body);
 
-            error_log("ℹ️ MeliPayamak: HTTP Status - {$http_code}");
-            error_log("ℹ️ MeliPayamak: Raw Response - {$raw_body}");
+            otp_verifier_log("ℹ️ MeliPayamak: HTTP Status - {$http_code}");
+            otp_verifier_log("ℹ️ MeliPayamak: Raw Response - {$raw_body}");
 
             // تلاش برای تبدیل JSON پاسخ
             $data = json_decode($raw_body, true);
 
             if (json_last_error() !== JSON_ERROR_NONE) {
                 $json_error = json_last_error_msg();
-                error_log("⚠️ MeliPayamak: Invalid JSON response - {$json_error}");
-                error_log("======================================");
+                otp_verifier_log("⚠️ MeliPayamak: Invalid JSON response - {$json_error}");
+                otp_verifier_log("======================================");
 
                 return (object)[
                     'success' => false,
@@ -86,19 +86,19 @@ class SMS_Gateway_MeliPayamak extends OTP_SMS_Gateway
             $code = $data['Value'] ?? null;
             $message = $data['StrRetStatus'] ?? '';
 
-            error_log("ℹ️ MeliPayamak: Parsed - Value={$code}, RetStatus=" . ($data['RetStatus'] ?? 'NULL') . ", StrRetStatus={$message}");
+            otp_verifier_log("ℹ️ MeliPayamak: Parsed - Value={$code}, RetStatus=" . ($data['RetStatus'] ?? 'NULL') . ", StrRetStatus={$message}");
 
             if (isset($code) && is_numeric($code) && strlen($code) > 15) {
                 $success = true;
-                error_log("✅ MeliPayamak: SUCCESS (long numeric Value)");
+                otp_verifier_log("✅ MeliPayamak: SUCCESS (long numeric Value)");
             } elseif (!empty($data['RetStatus']) && intval($data['RetStatus']) === 1) {
                 $success = true;
-                error_log("✅ MeliPayamak: SUCCESS (RetStatus = 1)");
+                otp_verifier_log("✅ MeliPayamak: SUCCESS (RetStatus = 1)");
             } else {
-                error_log("❌ MeliPayamak: FAILED");
+                otp_verifier_log("❌ MeliPayamak: FAILED");
             }
 
-            error_log("======================================");
+            otp_verifier_log("======================================");
 
             return (object)[
                 'success' => $success,
@@ -107,9 +107,9 @@ class SMS_Gateway_MeliPayamak extends OTP_SMS_Gateway
                 'raw_response' => $raw_body
             ];
         } catch (Exception $e) {
-            error_log("❌ MeliPayamak: EXCEPTION - " . $e->getMessage());
-            error_log("❌ Stack trace: " . $e->getTraceAsString());
-            error_log("======================================");
+            otp_verifier_log("❌ MeliPayamak: EXCEPTION - " . $e->getMessage());
+            otp_verifier_log("❌ Stack trace: " . $e->getTraceAsString());
+            otp_verifier_log("======================================");
 
             return (object)[
                 'success' => false,

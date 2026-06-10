@@ -11,20 +11,20 @@ class OTP_Verifier_Script_Enqueuer
             $settings = get_option('otp_verifier_settings', []);
             $active_login = isset($settings['active_login']) ? (bool) $settings['active_login'] : false;
 
-            error_log("ℹ️ setup_scripts: active_login = " . ($active_login ? 'true' : 'false'));
+            otp_verifier_log("ℹ️ setup_scripts: active_login = " . ($active_login ? 'true' : 'false'));
 
             if (!$active_login) {
-                error_log("ℹ️ setup_scripts: Login disabled, skipping script enqueue");
+                otp_verifier_log("ℹ️ setup_scripts: Login disabled, skipping script enqueue");
                 return;
             }
 
             if (function_exists('is_account_page') && is_account_page() && !is_user_logged_in()) {
-                error_log("✅ setup_scripts: Using direct script tags in login template (no wp_head/wp_footer)");
+                otp_verifier_log("✅ setup_scripts: Using direct script tags in login template (no wp_head/wp_footer)");
             } else {
-                error_log("ℹ️ setup_scripts: Not on account page or user logged in");
+                otp_verifier_log("ℹ️ setup_scripts: Not on account page or user logged in");
             }
         } catch (Exception $e) {
-            error_log("❌ setup_scripts: Exception - " . $e->getMessage());
+            otp_verifier_log("❌ setup_scripts: Exception - " . $e->getMessage());
         }
     }
 
@@ -69,9 +69,9 @@ class OTP_Verifier_Script_Enqueuer
                 ]
             ]);
 
-            error_log("✅ enqueue_scripts_in_footer: Scripts enqueued successfully (expire: {$expire}s, length: {$otp_len})");
+            otp_verifier_log("✅ enqueue_scripts_in_footer: Scripts enqueued successfully (expire: {$expire}s, length: {$otp_len})");
         } catch (Exception $e) {
-            error_log("❌ enqueue_scripts_in_footer: Exception - " . $e->getMessage());
+            otp_verifier_log("❌ enqueue_scripts_in_footer: Exception - " . $e->getMessage());
         }
     }
 }

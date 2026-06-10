@@ -12,9 +12,9 @@ class OTP_Verifier_Deactivator
         if (class_exists('OTP_Verifier_Handler')) {
             OTP_Verifier_Handler::cleanup_cron();
 
-            error_log("✅ OTP_Verifier_Deactivator: Plugin deactivated. Cron jobs stopped.");
+            otp_verifier_log("✅ OTP_Verifier_Deactivator: Plugin deactivated. Cron jobs stopped.");
         } else {
-            error_log("❌ OTP_Verifier_Deactivator: Handler class not found during deactivation.");
+            otp_verifier_log("❌ OTP_Verifier_Deactivator: Handler class not found during deactivation.");
         }
     }
 }

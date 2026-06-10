@@ -42,16 +42,16 @@ class OTP_Verifier_Digits_Migrator
 
                     if ($result) {
                         $migrated_count++;
-                        error_log("✅ Digits Migration: User ID {$user->ID} - {$digits_phone} -> {$standard_phone}");
+                        otp_verifier_log("✅ Digits Migration: User ID {$user->ID} - {$digits_phone} -> {$standard_phone}");
                     } else {
                         $failed_count++;
                         $errors[] = "User ID {$user->ID}: Failed to update meta";
-                        error_log("❌ Digits Migration: Failed to update User ID {$user->ID}");
+                        otp_verifier_log("❌ Digits Migration: Failed to update User ID {$user->ID}");
                     }
                 } else {
                     $failed_count++;
                     $errors[] = "User ID {$user->ID}: Invalid phone format ({$digits_phone})";
-                    error_log("❌ Digits Migration: Invalid format for User ID {$user->ID} - {$digits_phone}");
+                    otp_verifier_log("❌ Digits Migration: Invalid format for User ID {$user->ID} - {$digits_phone}");
                 }
             }
 
@@ -62,7 +62,7 @@ class OTP_Verifier_Digits_Migrator
                 'status' => 'done'
             ];
         } catch (Exception $e) {
-            error_log("❌ Digits Migration Exception: " . $e->getMessage());
+            otp_verifier_log("❌ Digits Migration Exception: " . $e->getMessage());
             return [
                 'migrated' => 0,
                 'failed' => 0,

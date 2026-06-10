@@ -13,20 +13,20 @@ class SMS_Gateway_Kavenegar extends OTP_SMS_Gateway
      */
     public function send_sms(string $to, array $variables, string $pattern): object
     {
-        error_log("======================================");
-        error_log("📤 KAVENEGAR SMS SEND STARTED");
-        error_log("======================================");
+        otp_verifier_log("======================================");
+        otp_verifier_log("📤 KAVENEGAR SMS SEND STARTED");
+        otp_verifier_log("======================================");
 
         try {
-            error_log("ℹ️ Kavenegar: To - {$to}");
-            error_log("ℹ️ Kavenegar: Template - {$pattern}");
-            error_log("ℹ️ Kavenegar: Variables - " . json_encode($variables));
-            error_log("ℹ️ Kavenegar: API Key - " . (empty($this->api_key) ? "EMPTY" : "SET (" . substr($this->api_key, 0, 10) . "...)"));
+            otp_verifier_log("ℹ️ Kavenegar: To - {$to}");
+            otp_verifier_log("ℹ️ Kavenegar: Template - {$pattern}");
+            otp_verifier_log("ℹ️ Kavenegar: Variables - " . json_encode($variables));
+            otp_verifier_log("ℹ️ Kavenegar: API Key - " . (empty($this->api_key) ? "EMPTY" : "SET (" . substr($this->api_key, 0, 10) . "...)"));
 
             // ساخت URL با API Key
             $url = 'https://api.kavenegar.com/v1/' . $this->api_key . '/verify/lookup.json';
 
-            error_log("ℹ️ Kavenegar: Base URL - " . preg_replace('/v1\/[^\/]+\//', 'v1/***//', $url));
+            otp_verifier_log("ℹ️ Kavenegar: Base URL - " . preg_replace('/v1\/[^\/]+\//', 'v1/***//', $url));
 
             // آماده‌سازی پارامترها
             $params = [
@@ -41,7 +41,7 @@ class SMS_Gateway_Kavenegar extends OTP_SMS_Gateway
             }
 
             $final_url = add_query_arg($params, $url);
-            error_log("ℹ️ Kavenegar: Final URL parameters - " . json_encode($params));
+            otp_verifier_log("ℹ️ Kavenegar: Final URL parameters - " . json_encode($params));
 
             // ارسال درخواست GET
             $response = wp_remote_get($final_url, [
@@ -51,8 +51,8 @@ class SMS_Gateway_Kavenegar extends OTP_SMS_Gateway
             // بررسی خطای وردپرس
             if (is_wp_error($response)) {
                 $error_msg = $response->get_error_message();
-                error_log("❌ Kavenegar: wp_remote_get ERROR - {$error_msg}");
-                error_log("======================================");
+                otp_verifier_log("❌ Kavenegar: wp_remote_get ERROR - {$error_msg}");
+                otp_verifier_log("======================================");
 
                 return (object)[
                     'success' => false,
@@ -65,14 +65,14 @@ class SMS_Gateway_Kavenegar extends OTP_SMS_Gateway
             $http_code = wp_remote_retrieve_response_code($response);
             $raw_body = wp_remote_retrieve_body($response);
 
-            error_log("ℹ️ Kavenegar: HTTP Status - {$http_code}");
-            error_log("ℹ️ Kavenegar: Raw Response - {$raw_body}");
+            otp_verifier_log("ℹ️ Kavenegar: HTTP Status - {$http_code}");
+            otp_verifier_log("ℹ️ Kavenegar: Raw Response - {$raw_body}");
 
             $data = json_decode($raw_body, true);
 
             if (json_last_error() !== JSON_ERROR_NONE) {
                 $json_error = json_last_error_msg();
-                error_log("⚠️ Kavenegar: Invalid JSON response - {$json_error}");
+                otp_verifier_log("⚠️ Kavenegar: Invalid JSON response - {$json_error}");
             }
 
             // بررسی موفقیت بر اساس ساختار response
@@ -82,29 +82,29 @@ class SMS_Gateway_Kavenegar extends OTP_SMS_Gateway
 
             if (isset($data['return']['status'])) {
                 $status = $data['return']['status'];
-                error_log("ℹ️ Kavenegar: Return status - {$status}");
+                otp_verifier_log("ℹ️ Kavenegar: Return status - {$status}");
 
                 if ($status == 200) {
                     // پاسخ موفق
                     $success = true;
                     $code = $data['entries'][0]['messageid'] ?? null;
                     $message = 'پیامک با موفقیت ارسال شد';
-                    error_log("✅ Kavenegar: SUCCESS (Message ID: {$code})");
+                    otp_verifier_log("✅ Kavenegar: SUCCESS (Message ID: {$code})");
                 } else {
                     // پاسخ خطا
                     $success = false;
                     $code = $status;
                     $message = $data['return']['message'] ?? 'خطای نامشخص در ارسال پیامک';
-                    error_log("❌ Kavenegar: FAILED - Status: {$code}, Message: {$message}");
+                    otp_verifier_log("❌ Kavenegar: FAILED - Status: {$code}, Message: {$message}");
                 }
             } else {
-                error_log("❌ Kavenegar: Invalid response structure - missing 'return.status'");
+                otp_verifier_log("❌ Kavenegar: Invalid response structure - missing 'return.status'");
                 $success = false;
                 $code = null;
                 $message = 'پاسخ نامعتبر از سرور';
             }
 
-            error_log("======================================");
+            otp_verifier_log("======================================");
 
             return (object)[
                 'success' => $success,
@@ -113,9 +113,9 @@ class SMS_Gateway_Kavenegar extends OTP_SMS_Gateway
                 'raw_response' => $raw_body
             ];
         } catch (Exception $e) {
-            error_log("❌ Kavenegar: EXCEPTION - " . $e->getMessage());
-            error_log("❌ Stack trace: " . $e->getTraceAsString());
-            error_log("======================================");
+            otp_verifier_log("❌ Kavenegar: EXCEPTION - " . $e->getMessage());
+            otp_verifier_log("❌ Stack trace: " . $e->getTraceAsString());
+            otp_verifier_log("======================================");
 
             return (object)[
                 'success' => false,

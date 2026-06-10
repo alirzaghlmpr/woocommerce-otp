@@ -19,9 +19,9 @@ class OTP_AJAX_Handler
             $this->otp_handler = new OTP_Verifier_Handler();
             $this->rate_limiter = new OTP_Verifier_Rate_Limiter();
             $this->script_enqueuer = new OTP_Verifier_Script_Enqueuer();
-            error_log("✅ OTP_AJAX_Handler: Handler initialized successfully");
+            otp_verifier_log("✅ OTP_AJAX_Handler: Handler initialized successfully");
         } catch (Exception $e) {
-            error_log("❌ OTP_AJAX_Handler: Failed to initialize handler - " . $e->getMessage());
+            otp_verifier_log("❌ OTP_AJAX_Handler: Failed to initialize handler - " . $e->getMessage());
             return;
         }
 
@@ -35,15 +35,15 @@ class OTP_AJAX_Handler
         add_action('wp', [$this, 'setup_scripts']);
 
         // ✅ پاکسازی transient های منقضی شده
-        add_action('otp_verifier_cleanup_cron', [$this, 'cleanup_expired_transients']);
+        add_action('otp_verifier_transient_cleanup', [$this, 'cleanup_expired_transients']);
 
         // ✅ راه‌اندازی Cron برای پاکسازی خودکار
-        if (!wp_next_scheduled('otp_verifier_cleanup_cron')) {
-            $scheduled = wp_schedule_event(time(), 'hourly', 'otp_verifier_cleanup_cron');
+        if (!wp_next_scheduled('otp_verifier_transient_cleanup')) {
+            $scheduled = wp_schedule_event(time(), 'hourly', 'otp_verifier_transient_cleanup');
             if ($scheduled === false) {
-                error_log("❌ Rate Limit Cleanup Cron: Failed to schedule");
+                otp_verifier_log("❌ Rate Limit Cleanup Cron: Failed to schedule");
             } else {
-                error_log("✅ Rate Limit Cleanup Cron: Scheduled successfully");
+                otp_verifier_log("✅ Rate Limit Cleanup Cron: Scheduled successfully");
             }
         }
     }
@@ -68,7 +68,7 @@ class OTP_AJAX_Handler
     {
         $phone = OTP_Verifier_Phone_Util::sanitize_iranian_phone($phone);
         if ($phone) {
-            error_log("✅ validate_iranian_phone: Valid phone - {$phone}");
+            otp_verifier_log("✅ validate_iranian_phone: Valid phone - " . otp_verifier_mask_phone($phone) . "");
         }
         return $phone;
     }
@@ -80,7 +80,7 @@ class OTP_AJAX_Handler
     private function convert_to_digits_format($phone)
     {
         $phone = OTP_Verifier_Phone_Util::to_digits_format($phone);
-        error_log("ℹ️ convert_to_digits_format: Converted to Digits format - {$phone}");
+        otp_verifier_log("ℹ️ convert_to_digits_format: Converted to Digits format - " . otp_verifier_mask_phone($phone) . "");
         return $phone;
     }
 
@@ -91,7 +91,7 @@ class OTP_AJAX_Handler
     private function convert_from_digits_format($digits_phone)
     {
         $phone = OTP_Verifier_Phone_Util::from_digits_format($digits_phone);
-        error_log("ℹ️ convert_from_digits_format: Converted from Digits format - {$phone}");
+        otp_verifier_log("ℹ️ convert_from_digits_format: Converted from Digits format - " . otp_verifier_mask_phone($phone) . "");
         return $phone;
     }
 
@@ -127,6 +127,15 @@ class OTP_AJAX_Handler
         try {
             if (!check_ajax_referer('otp_login_nonce', 'security', false)) {
                 wp_send_json_error(['message' => 'درخواست نامعتبر است.']);
+                return;
+            }
+
+            // ✅ جلوگیری از حملات Brute-force روی ورود با رمز عبور (محدودیت بر اساس IP)
+            if (!$this->check_ip_rate_limit()) {
+                otp_verifier_log("❌ handle_password_login: IP rate limit exceeded");
+                wp_send_json_error([
+                    'message' => 'تعداد تلاش‌های شما بیش از حد مجاز است. لطفاً چند دقیقه صبر کنید.'
+                ]);
                 return;
             }
 
@@ -166,14 +175,14 @@ class OTP_AJAX_Handler
      */
     public function handle_send_otp()
     {
-        error_log("======================================");
-        error_log("📤 SEND OTP REQUEST STARTED");
-        error_log("======================================");
+        otp_verifier_log("======================================");
+        otp_verifier_log("📤 SEND OTP REQUEST STARTED");
+        otp_verifier_log("======================================");
 
         try {
             // بررسی nonce
             if (!check_ajax_referer('otp_login_nonce', 'security', false)) {
-                error_log("❌ handle_send_otp: Invalid nonce");
+                otp_verifier_log("❌ handle_send_otp: Invalid nonce");
                 wp_send_json_error(['message' => 'درخواست نامعتبر است.']);
                 return;
             }
@@ -182,11 +191,11 @@ class OTP_AJAX_Handler
             $login_only = !empty($_POST['login_only']);
             $raw_username = isset($_POST['username']) ? wp_unslash($_POST['username']) : '';
             $username = sanitize_user($raw_username, true);
-            error_log("ℹ️ handle_send_otp: Raw phone input - {$phone}");
+            otp_verifier_log("ℹ️ handle_send_otp: Raw phone input - " . otp_verifier_mask_phone($phone));
 
             $phone = $this->validate_iranian_phone($phone);
             if (!$phone) {
-                error_log("❌ handle_send_otp: Phone validation failed");
+                otp_verifier_log("❌ handle_send_otp: Phone validation failed");
                 wp_send_json_error([
                     'message' => 'شماره موبایل معتبر نیست. فرمت صحیح: 09xxxxxxxxx'
                 ]);
@@ -275,7 +284,7 @@ class OTP_AJAX_Handler
 
             // ✅ Rate Limiting
             if (!$this->check_rate_limit($phone)) {
-                error_log("❌ handle_send_otp: Rate limit exceeded for {$phone}");
+                otp_verifier_log("❌ handle_send_otp: Rate limit exceeded for " . otp_verifier_mask_phone($phone) . "");
                 wp_send_json_error([
                     'message' => 'شما بیش از حد مجاز درخواست ارسال کرده‌اید. لطفاً 5 دقیقه صبر کنید.'
                 ]);
@@ -284,7 +293,7 @@ class OTP_AJAX_Handler
 
             if (!$this->check_ip_rate_limit()) {
                 $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
-                error_log("❌ handle_send_otp: IP rate limit exceeded for {$ip}");
+                otp_verifier_log("❌ handle_send_otp: IP rate limit exceeded for {$ip}");
                 wp_send_json_error([
                     'message' => 'تعداد درخواست‌های شما از این IP بیش از حد است.'
                 ]);
@@ -293,19 +302,19 @@ class OTP_AJAX_Handler
 
             $otp = $this->otp_handler->generate_otp($phone);
             if (!$otp) {
-                error_log("❌ handle_send_otp: Failed to generate OTP for {$phone}");
+                otp_verifier_log("❌ handle_send_otp: Failed to generate OTP for " . otp_verifier_mask_phone($phone) . "");
                 wp_send_json_error(['message' => 'خطا در تولید کد تایید.']);
                 return;
             }
 
-            error_log("✅ handle_send_otp: OTP generated - Phone: {$phone}, Code: {$otp}");
+            otp_verifier_log("✅ handle_send_otp: OTP generated - Phone: " . otp_verifier_mask_phone($phone));
 
             // ارسال پیامک
             $settings = get_option('otp_verifier_settings', []);
             $gateway_name = $settings['gateway'] ?? 'melipayamak';
             $gateway = otp_verifier_get_sms_gateway($gateway_name, $settings);
 
-            error_log("ℹ️ handle_send_otp: Using gateway - {$gateway_name}");
+            otp_verifier_log("ℹ️ handle_send_otp: Using gateway - {$gateway_name}");
 
             $sms_result = null;
             $sms_data = [];
@@ -319,30 +328,30 @@ class OTP_AJAX_Handler
             $sms_result = $gateway->send_sms($phone, $sms_data, $settings['pattern']);
 
             if (!$sms_result) {
-                error_log("❌ handle_send_otp: Unknown gateway or no result - {$gateway_name}");
+                otp_verifier_log("❌ handle_send_otp: Unknown gateway or no result - {$gateway_name}");
                 wp_send_json_error(['message' => 'درگاه پیامکی پیکربندی نشده است.']);
                 return;
             }
 
             if (!$sms_result->success) {
-                error_log("❌ handle_send_otp: SMS failed - Gateway: {$gateway_name}, Phone: {$phone}");
-                error_log("❌ SMS Error Details: " . print_r($sms_result, true));
+                otp_verifier_log("❌ handle_send_otp: SMS failed - Gateway: {$gateway_name}, Phone: " . otp_verifier_mask_phone($phone) . "");
+                otp_verifier_log("❌ SMS Error Details: " . print_r($sms_result, true));
                 wp_send_json_error([
                     'message' => 'خطا در ارسال پیامک. لطفاً دوباره تلاش کنید.'
                 ]);
                 return;
             }
 
-            error_log("✅ handle_send_otp: SMS sent successfully - Gateway: {$gateway_name}, Phone: {$phone}");
-            error_log("======================================");
+            otp_verifier_log("✅ handle_send_otp: SMS sent successfully - Gateway: {$gateway_name}, Phone: " . otp_verifier_mask_phone($phone) . "");
+            otp_verifier_log("======================================");
 
             wp_send_json_success([
                 'message' => 'کد تایید به شماره ' . substr($phone, 0, 4) . '***' . substr($phone, -2) . ' ارسال شد.'
             ]);
         } catch (Exception $e) {
-            error_log("❌ handle_send_otp: EXCEPTION - " . $e->getMessage());
-            error_log("❌ Stack trace: " . $e->getTraceAsString());
-            error_log("======================================");
+            otp_verifier_log("❌ handle_send_otp: EXCEPTION - " . $e->getMessage());
+            otp_verifier_log("❌ Stack trace: " . $e->getTraceAsString());
+            otp_verifier_log("======================================");
             wp_send_json_error(['message' => 'خطای سیستمی رخ داده است.']);
         }
     }
@@ -352,14 +361,14 @@ class OTP_AJAX_Handler
      */
     public function handle_verify_otp()
     {
-        error_log("======================================");
-        error_log("🔐 VERIFY OTP REQUEST STARTED");
-        error_log("======================================");
+        otp_verifier_log("======================================");
+        otp_verifier_log("🔐 VERIFY OTP REQUEST STARTED");
+        otp_verifier_log("======================================");
 
         try {
             // بررسی nonce
             if (!check_ajax_referer('otp_login_nonce', 'security', false)) {
-                error_log("❌ handle_verify_otp: Invalid nonce");
+                otp_verifier_log("❌ handle_verify_otp: Invalid nonce");
                 wp_send_json_error(['message' => 'درخواست نامعتبر است.']);
                 return;
             }
@@ -371,11 +380,11 @@ class OTP_AJAX_Handler
             $password = isset($_POST['password']) ? (string) $_POST['password'] : '';
             $login_only = !empty($_POST['login_only']);
 
-            error_log("ℹ️ handle_verify_otp: Raw input - Phone: {$phone}, OTP: {$otp_code}");
+            otp_verifier_log("ℹ️ handle_verify_otp: Raw input - Phone: " . otp_verifier_mask_phone($phone));
 
             $phone = $this->validate_iranian_phone($phone);
             if (!$phone) {
-                error_log("❌ handle_verify_otp: Invalid phone number");
+                otp_verifier_log("❌ handle_verify_otp: Invalid phone number");
                 wp_send_json_error(['message' => 'شماره موبایل معتبر نیست.']);
                 return;
             }
@@ -397,7 +406,7 @@ class OTP_AJAX_Handler
             }
 
             if (empty($otp_code)) {
-                error_log("❌ handle_verify_otp: Empty OTP code");
+                otp_verifier_log("❌ handle_verify_otp: Empty OTP code");
                 wp_send_json_error(['message' => 'کد تایید وارد نشده است.']);
                 return;
             }
@@ -405,12 +414,12 @@ class OTP_AJAX_Handler
             $is_valid = $this->otp_handler->verify_otp($phone, $otp_code);
 
             if (!$is_valid) {
-                error_log("❌ handle_verify_otp: OTP verification failed - Phone: {$phone}, Code: {$otp_code}");
+                otp_verifier_log("❌ handle_verify_otp: OTP verification failed - Phone: " . otp_verifier_mask_phone($phone));
                 wp_send_json_error(['message' => 'کد تایید اشتباه یا منقضی شده است.']);
                 return;
             }
 
-            error_log("✅ handle_verify_otp: OTP verified successfully - Phone: {$phone}");
+            otp_verifier_log("✅ handle_verify_otp: OTP verified successfully - Phone: " . otp_verifier_mask_phone($phone) . "");
 
             // بررسی کاربر موجود با phone_number
             $user = get_users([
@@ -429,11 +438,11 @@ class OTP_AJAX_Handler
                     return;
                 }
 
-                error_log("✅ handle_verify_otp: Existing user found with phone_number - Phone: {$phone}, User ID: {$user_id}, Username: {$user[0]->user_login}");
+                otp_verifier_log("✅ handle_verify_otp: Existing user found with phone_number - Phone: " . otp_verifier_mask_phone($phone) . ", User ID: {$user_id}, Username: {$user[0]->user_login}");
             } else {
                 // بررسی کاربران Digits (شماره بدون صفر اول و با کد کشور)
                 $digits_phone = $this->convert_to_digits_format($phone);
-                error_log("ℹ️ handle_verify_otp: Searching for Digits user - Digits format: {$digits_phone}");
+                otp_verifier_log("ℹ️ handle_verify_otp: Searching for Digits user - Digits format: " . otp_verifier_mask_phone($digits_phone) . "");
 
                 $digits_user = get_users([
                     'meta_key' => 'digits_phone_no',
@@ -444,14 +453,14 @@ class OTP_AJAX_Handler
 
                 if (!empty($digits_user)) {
                     $user_id = $digits_user[0]->ID;
-                    error_log("✅ handle_verify_otp: Existing Digits user found - Digits Phone: {$digits_phone}, User ID: {$user_id}, Username: {$digits_user[0]->user_login}");
+                    otp_verifier_log("✅ handle_verify_otp: Existing Digits user found - Digits Phone: " . otp_verifier_mask_phone($digits_phone) . ", User ID: {$user_id}, Username: {$digits_user[0]->user_login}");
 
                     // مهاجرت داده از Digits به فرمت جدید
                     $meta_result = update_user_meta($user_id, 'phone_number', $phone);
                     if ($meta_result) {
-                        error_log("✅ handle_verify_otp: Migrated Digits user - Added phone_number meta: {$phone} for User ID: {$user_id}");
+                        otp_verifier_log("✅ handle_verify_otp: Migrated Digits user - Added phone_number meta: " . otp_verifier_mask_phone($phone) . " for User ID: {$user_id}");
                     } else {
-                        error_log("⚠️ handle_verify_otp: Failed to migrate Digits user - User ID: {$user_id}");
+                        otp_verifier_log("⚠️ handle_verify_otp: Failed to migrate Digits user - User ID: {$user_id}");
                     }
                     if (!empty($username) && $username !== $digits_user[0]->user_login) {
                         wp_send_json_error(['message' => 'این شماره قبلاً با نام کاربری دیگری ثبت شده است.']);
@@ -459,19 +468,19 @@ class OTP_AJAX_Handler
                     }
                 } else {
                     if ($login_only) {
-                        error_log("❌ handle_verify_otp: Login-only flow, user not found for phone {$phone}");
+                        otp_verifier_log("❌ handle_verify_otp: Login-only flow, user not found for phone " . otp_verifier_mask_phone($phone) . "");
                         wp_send_json_error(['message' => 'حسابی با این شماره یافت نشد.']);
                         return;
                     }
 
                     // کاربر جدید - ایجاد حساب
-                    error_log("ℹ️ handle_verify_otp: No existing user found (checked both phone_number and digits_phone_no), creating new account - Phone: {$phone}");
+                    otp_verifier_log("ℹ️ handle_verify_otp: No existing user found (checked both phone_number and digits_phone_no), creating new account - Phone: " . otp_verifier_mask_phone($phone) . "");
 
                     $new_username = !empty($username) ? $username : $phone;
 
                     // اگر نام کاربری تکراری بود
                     if (username_exists($new_username)) {
-                        error_log("❌ handle_verify_otp: Username already exists - {$new_username}");
+                        otp_verifier_log("❌ handle_verify_otp: Username already exists - {$new_username}");
                         wp_send_json_error(['message' => 'این نام کاربری قبلاً ثبت شده است.']);
                         return;
                     }
@@ -489,7 +498,12 @@ class OTP_AJAX_Handler
                     }
 
                     $user_password = !empty($password) ? $password : wp_generate_password(16, true, true);
-                    $user_email = is_email($raw_username) ? sanitize_email($raw_username) : $phone . '@example.com';
+
+                    // ایمیل جایگزین بر اساس دامنه‌ی خود سایت ساخته می‌شود تا از دامنه‌ی رزروشده‌ی example.com
+                    // استفاده نشود و ایمیلی به دامنه‌ای خارج از کنترل ما ارسال نگردد.
+                    $site_host = wp_parse_url(home_url(), PHP_URL_HOST);
+                    $site_host = $site_host ? preg_replace('/^www\./', '', $site_host) : 'localhost';
+                    $user_email = is_email($raw_username) ? sanitize_email($raw_username) : $phone . '@' . $site_host;
 
                     $user_id = wp_create_user(
                         $new_username,
@@ -498,7 +512,7 @@ class OTP_AJAX_Handler
                     );
 
                     if (is_wp_error($user_id)) {
-                        error_log("❌ handle_verify_otp: User creation FAILED - Phone: {$phone}, Error: " . $user_id->get_error_message());
+                        otp_verifier_log("❌ handle_verify_otp: User creation FAILED - Phone: " . otp_verifier_mask_phone($phone) . ", Error: " . $user_id->get_error_message());
                         wp_send_json_error(['message' => 'خطا در ایجاد حساب کاربری.']);
                         return;
                     }
@@ -506,15 +520,15 @@ class OTP_AJAX_Handler
                     // تنظیم نقش کاربر به customer (برای ووکامرس)
                     $user = new WP_User($user_id);
                     $user->set_role('customer');
-                    error_log("✅ handle_verify_otp: User role set to 'customer' for User ID: {$user_id}");
+                    otp_verifier_log("✅ handle_verify_otp: User role set to 'customer' for User ID: {$user_id}");
 
                     // ذخیره شماره تلفن
                     $meta_result = update_user_meta($user_id, 'phone_number', $phone);
                     if (!$meta_result) {
-                        error_log("⚠️ handle_verify_otp: Failed to update phone_number meta for User ID: {$user_id}");
+                        otp_verifier_log("⚠️ handle_verify_otp: Failed to update phone_number meta for User ID: {$user_id}");
                     }
 
-                    error_log("✅ handle_verify_otp: New user created successfully - Phone: {$phone}, User ID: {$user_id}, Role: customer");
+                    otp_verifier_log("✅ handle_verify_otp: New user created successfully - Phone: " . otp_verifier_mask_phone($phone) . ", User ID: {$user_id}, Role: customer");
                 }
             }
 
@@ -522,8 +536,8 @@ class OTP_AJAX_Handler
             wp_set_current_user($user_id);
             wp_set_auth_cookie($user_id);
 
-            error_log("✅ handle_verify_otp: User logged in successfully - User ID: {$user_id}, Phone: {$phone}");
-            error_log("======================================");
+            otp_verifier_log("✅ handle_verify_otp: User logged in successfully - User ID: {$user_id}, Phone: " . otp_verifier_mask_phone($phone) . "");
+            otp_verifier_log("======================================");
 
             $redirect = function_exists('wc_get_page_permalink')
                 ? wc_get_page_permalink('myaccount')
@@ -534,9 +548,9 @@ class OTP_AJAX_Handler
                 'redirect' => $redirect
             ]);
         } catch (Exception $e) {
-            error_log("❌ handle_verify_otp: EXCEPTION - " . $e->getMessage());
-            error_log("❌ Stack trace: " . $e->getTraceAsString());
-            error_log("======================================");
+            otp_verifier_log("❌ handle_verify_otp: EXCEPTION - " . $e->getMessage());
+            otp_verifier_log("❌ Stack trace: " . $e->getTraceAsString());
+            otp_verifier_log("======================================");
             wp_send_json_error(['message' => 'خطای سیستمی رخ داده است.']);
         }
     }
