@@ -53,8 +53,15 @@ class OTP_Verifier_Script_Enqueuer
             $expire   = isset($settings['otp_expire']) ? absint($settings['otp_expire']) : 120;
             $otp_len  = isset($settings['otp_length']) ? absint($settings['otp_length']) : 6;
 
+            // مسیر admin-ajax را نسبی (بدون دامنه) می‌فرستیم تا درخواست همیشه به
+            // همان مبدائی (origin) ارسال شود که صفحه از آن باز شده است. این کار از
+            // خطای cross-origin زمانی که سایت با چند آدرس (localhost و IP شبکه)
+            // در دسترس است جلوگیری می‌کند.
+            $ajax_url  = admin_url('admin-ajax.php');
+            $ajax_path = wp_parse_url($ajax_url, PHP_URL_PATH);
+
             wp_localize_script('otp-login-script', 'otp_ajax', [
-                'ajaxurl'    => admin_url('admin-ajax.php'),
+                'ajaxurl'    => $ajax_path ? $ajax_path : $ajax_url,
                 'nonce'      => wp_create_nonce('otp_login_nonce'),
                 'expire'     => $expire,
                 'otp_length' => $otp_len,
