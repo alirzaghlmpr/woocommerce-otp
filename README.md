@@ -1,6 +1,6 @@
 ﻿# OTP Verifier
 
-![Version](https://img.shields.io/badge/Version-1.2.0-green)
+![Version](https://img.shields.io/badge/Version-1.3.0-green)
 ![WordPress](https://img.shields.io/badge/WordPress-5.8%2B-blue)
 ![WooCommerce](https://img.shields.io/badge/WooCommerce-6.0%2B-purple)
 ![PHP](https://img.shields.io/badge/PHP-7.4%2B-777bb4)
@@ -93,6 +93,20 @@ Login UI
 - Enhanced analytics and logging
 
 ## Changelog
+
+### 1.3.0
+- **Fix:** the inline checkout verification widget was appearing after the entire billing fields block (at the very end, past email) instead of right below the phone field. Switched from the `woocommerce_after_checkout_billing_form` action to appending onto WooCommerce's own `woocommerce_form_field_tel` filter output for `billing_phone`, which places the widget as a direct sibling immediately after that field.
+- **Feature:** the checkout verification widget/step buttons and links now use an admin-configurable color (color picker in settings) instead of a hardcoded one.
+- **Change:** more breathing room between fields/rows in the checkout verification widget and gate step (larger gaps, row spacing, input/button padding).
+
+### 1.2.3
+- **Fix:** checkout "gate" step showed a completely blank white page. The `<style>{display:none}` rule used to hide the checkout form until verified was scoped to `.woocommerce-checkout`, but WooCommerce itself adds that exact class name to the `<body>` tag on the checkout page (`wc_body_class()`), not just to the checkout form - so the rule was hiding the whole page, not just the form. Scoped the selector to `form.woocommerce-checkout` so it only ever matches the form element.
+
+### 1.2.2
+- **Change:** checkout "gate" mode no longer shows as a popup/modal with a dimmed, blurred checkout form behind it. It now renders as a plain step in the normal page flow — the checkout form is hidden entirely (not just dimmed) until the phone is verified, then it appears in its place, like the next step of a wizard rather than a dialog on top of the form.
+
+### 1.2.1
+- **Fix:** checkout phone verification (inline and gate modes) never activated on some sites — `OTP_Verifier_Checkout_Handler` was constructed behind a synchronous `class_exists('WooCommerce')` check at plugin-load time, which depends on plugin *activation order* (not alphabetical), so on installs where this plugin happened to load before WooCommerce, the class was silently never instantiated and none of its hooks (including the server-side `woocommerce_checkout_process` enforcement) were ever registered. The check is removed; the handler now always registers its hooks, which are themselves no-ops if WooCommerce isn't active.
 
 ### 1.2.0
 - **Feature:** WooCommerce checkout phone verification — inline (next to the billing-phone field) or gate (full overlay before checkout) mode, admin-selectable, enforced server-side

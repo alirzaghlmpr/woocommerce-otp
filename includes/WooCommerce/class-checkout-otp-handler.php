@@ -32,9 +32,16 @@ class OTP_Verifier_Checkout_Handler
         add_action('wp_ajax_nopriv_otp_checkout_verify', [$this, 'handle_verify_otp']);
 
         add_action('wp_enqueue_scripts', [$this, 'enqueue_assets']);
-        add_action('woocommerce_after_checkout_billing_form', [$this, 'render_inline_widget']);
+        // billing_phone is type="tel" in WooCommerce core - این فیلتر روی HTML
+        // نهایی‌ساخته‌شده‌ی هر فیلد اجرا می‌شود (نه description که از wp_kses_post
+        // عبور می‌کند و ممکن است <button>/<input> ویجت را حذف کند)، پس با append
+        // کردن به همان رشته، ویجت دقیقاً به‌صورت یک sibling بعد از خود فیلد شماره
+        // موبایل (نه انتهای کل فرم صورتحساب) چاپ می‌شود.
+        add_filter('woocommerce_form_field_tel', [$this, 'inject_inline_widget_after_phone_field'], 10, 4);
         add_action('woocommerce_before_checkout_form', [$this, 'render_gate_overlay'], 5);
         add_action('woocommerce_checkout_process', [$this, 'enforce_verification']);
+
+        otp_verifier_log('✅ OTP_Verifier_Checkout_Handler: هوک‌های تایید موبایل در تسویه‌حساب ثبت شدند (enabled=' . ($this->is_enabled() ? 'true' : 'false') . ', mode=' . $this->get_mode() . ')');
     }
 
     /**
@@ -181,17 +188,33 @@ class OTP_Verifier_Checkout_Handler
         ]);
     }
 
-    /**
-     * حالت «داخل فرم»: ویجت کنار فیلد استاندارد شماره موبایل ووکامرس رندر می‌شود
-     * (بدون افزودن فیلد جدید - از همان billing_phone استفاده می‌شود).
-     */
-    public function render_inline_widget()
+    private function checkout_color()
     {
-        if (!$this->requires_verification_for_current_user() || $this->get_mode() !== 'inline' || $this->is_block_checkout()) {
-            return;
+        $settings = get_option('otp_verifier_settings', []);
+        $color = $settings['checkout_verify_color'] ?? '#2d264b';
+        return preg_match('/^#[0-9a-fA-F]{6}$/', $color) ? $color : '#2d264b';
+    }
+
+    /**
+     * حالت «داخل فرم»: ویجت مستقیماً بعد از فیلد استاندارد شماره موبایل ووکامرس
+     * (billing_phone) رندر می‌شود - نه انتهای کل فرم صورتحساب. فیلد جدیدی
+     * اضافه نمی‌شود، همان billing_phone استفاده می‌شود.
+     */
+    public function inject_inline_widget_after_phone_field($field, $key, $args, $value)
+    {
+        if ($key !== 'billing_phone' || !$this->requires_verification_for_current_user() || $this->get_mode() !== 'inline' || $this->is_block_checkout()) {
+            return $field;
         }
+
+        ob_start();
+        $this->render_inline_widget_markup();
+        return $field . ob_get_clean();
+    }
+
+    private function render_inline_widget_markup()
+    {
 ?>
-        <div id="otp-checkout-inline" class="otp-checkout-widget">
+        <div id="otp-checkout-inline" class="otp-checkout-widget" style="--otp-checkout-color: <?php echo esc_attr($this->checkout_color()); ?>;">
             <div class="otp-checkout-widget__row">
                 <button type="button" id="otp-checkout-send-btn" class="otp-checkout-btn">ارسال کد تایید شماره موبایل</button>
                 <span id="otp-checkout-status" class="otp-checkout-status"></span>
@@ -207,8 +230,18 @@ class OTP_Verifier_Checkout_Handler
     }
 
     /**
-     * حالت «قفل کامل»: پیش از نمایش فرم تسویه‌حساب، پنجره تایید شماره موبایل
-     * نمایش داده می‌شود. اگر شماره‌ای از قبل در این session تایید شده، رندر نمی‌شود.
+     * حالت «قفل کامل» (به‌صورت یک مرحله/Step، نه پاپ‌آپ روی فرم): پیش از نمایش
+     * فرم تسویه‌حساب، ابتدا این مرحله‌ی تایید شماره موبایل نمایش داده می‌شود و
+     * فرم اصلی (form.woocommerce-checkout) کاملاً مخفی است - نه فقط blur/غیرفعال.
+     * مخفی‌سازی از طریق یک <style> اینلاین انجام می‌شود (نه کلاس/JS) تا فرم حتی
+     * برای یک لحظه هم قبل از اجرای جاوااسکریپت دیده نشود (بدون پرش/فلش تصویری).
+     * توجه مهم: سلکتور باید حتماً محدود به تگ form باشد (form.woocommerce-checkout)
+     * نه فقط .woocommerce-checkout - چون خود ووکامرس همین کلاس را روی تگ body هم
+     * اضافه می‌کند (wc_body_class در wc-template-functions.php) و اگر سلکتور به
+     * فرم محدود نشود، کل صفحه (body) مخفی و سفید می‌شود.
+     * پس از تایید موفق، JS همین تگ <style> را کامل حذف می‌کند تا فرم مثل مرحله
+     * بعدی یک ویزارد نمایان شود. اگر شماره‌ای از قبل در این session تایید شده،
+     * اصلاً رندر نمی‌شود.
      */
     public function render_gate_overlay()
     {
@@ -222,24 +255,23 @@ class OTP_Verifier_Checkout_Handler
             return;
         }
 ?>
-        <div id="otp-checkout-gate" class="otp-checkout-gate">
-            <div class="otp-checkout-gate__card">
-                <h3 class="otp-checkout-gate__title">تایید شماره موبایل</h3>
-                <p class="otp-checkout-gate__desc">برای مشاهده و تکمیل فرم تسویه‌حساب، لطفاً ابتدا شماره موبایل خود را تایید کنید.</p>
+        <style id="otp-checkout-gate-style">form.woocommerce-checkout{display:none;}</style>
+        <div id="otp-checkout-gate" class="otp-checkout-gate-step" style="--otp-checkout-color: <?php echo esc_attr($this->checkout_color()); ?>;">
+            <h3 class="otp-checkout-gate-step__title">تایید شماره موبایل</h3>
+            <p class="otp-checkout-gate-step__desc">برای مشاهده و تکمیل فرم تسویه‌حساب، لطفاً ابتدا شماره موبایل خود را تایید کنید.</p>
 
-                <div id="otp-checkout-gate-phone-row" class="otp-checkout-widget__row">
-                    <input type="tel" inputmode="numeric" maxlength="11" id="otp-checkout-gate-phone" class="otp-checkout-code-input" placeholder="شماره موبایل">
-                    <button type="button" id="otp-checkout-gate-send-btn" class="otp-checkout-btn">ارسال کد</button>
-                </div>
-
-                <div id="otp-checkout-gate-code-row" class="otp-checkout-widget__row otp-checkout-hidden">
-                    <input type="text" inputmode="numeric" pattern="[0-9]*" id="otp-checkout-gate-code" class="otp-checkout-code-input" placeholder="کد تایید" maxlength="6" autocomplete="one-time-code">
-                    <button type="button" id="otp-checkout-gate-verify-btn" class="otp-checkout-btn">تایید</button>
-                    <button type="button" id="otp-checkout-gate-resend-btn" class="otp-checkout-link" disabled>ارسال مجدد</button>
-                </div>
-
-                <p id="otp-checkout-gate-msg" class="otp-checkout-msg otp-checkout-hidden"></p>
+            <div id="otp-checkout-gate-phone-row" class="otp-checkout-widget__row">
+                <input type="tel" inputmode="numeric" maxlength="11" id="otp-checkout-gate-phone" class="otp-checkout-code-input" placeholder="شماره موبایل">
+                <button type="button" id="otp-checkout-gate-send-btn" class="otp-checkout-btn">ارسال کد</button>
             </div>
+
+            <div id="otp-checkout-gate-code-row" class="otp-checkout-widget__row otp-checkout-hidden">
+                <input type="text" inputmode="numeric" pattern="[0-9]*" id="otp-checkout-gate-code" class="otp-checkout-code-input" placeholder="کد تایید" maxlength="6" autocomplete="one-time-code">
+                <button type="button" id="otp-checkout-gate-verify-btn" class="otp-checkout-btn">تایید</button>
+                <button type="button" id="otp-checkout-gate-resend-btn" class="otp-checkout-link" disabled>ارسال مجدد</button>
+            </div>
+
+            <p id="otp-checkout-gate-msg" class="otp-checkout-msg otp-checkout-hidden"></p>
         </div>
 <?php
     }

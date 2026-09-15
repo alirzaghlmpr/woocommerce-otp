@@ -287,12 +287,13 @@
     }
 
     // ===================== Gate mode =====================
+    // This is a step shown before checkout, not a popup: PHP already hides
+    // form.woocommerce-checkout via an inline <style> tag before this script
+    // even runs (no flash of the form), and on success we just remove that
+    // tag - no body-locking classes or aria-hidden juggling needed here.
     function initGateMode() {
       const $gate = $("#otp-checkout-gate");
       if (!$gate.length) return;
-
-      $("body").addClass("otp-checkout-locked");
-      $(".woocommerce-checkout").attr("aria-hidden", "true");
 
       const $phoneInput = $("#otp-checkout-gate-phone");
       const $sendBtn = $("#otp-checkout-gate-send-btn");
@@ -378,8 +379,7 @@
           function () {
             stopWebOtp();
             verifiedPhone = lastSentPhone;
-            $("body").removeClass("otp-checkout-locked");
-            $(".woocommerce-checkout").removeAttr("aria-hidden");
+            $("#otp-checkout-gate-style").remove();
             $gate.remove();
 
             const $billingPhone = $("#billing_phone");

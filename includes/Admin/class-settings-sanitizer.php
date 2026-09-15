@@ -44,6 +44,8 @@ class OTP_Verifier_Settings_Sanitizer
         $checkout_mode = sanitize_text_field($input['checkout_verify_mode'] ?? 'inline');
         $output['checkout_verify_mode'] = in_array($checkout_mode, ['inline', 'gate'], true) ? $checkout_mode : 'inline';
         $output['checkout_verify_require_logged_in'] = isset($input['checkout_verify_require_logged_in']) ? (bool) $input['checkout_verify_require_logged_in'] : false;
+        $checkout_color = sanitize_hex_color($input['checkout_verify_color'] ?? '');
+        $output['checkout_verify_color'] = $checkout_color ? $checkout_color : '#2d264b';
 
         return $output;
     }
