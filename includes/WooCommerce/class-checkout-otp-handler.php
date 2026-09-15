@@ -56,6 +56,28 @@ class OTP_Verifier_Checkout_Handler
         return !empty($settings['checkout_verify_enabled']);
     }
 
+    /**
+     * آیا برای کاربر فعلی، تایید شماره موبایل در تسویه‌حساب لازم است؟
+     * به‌طور پیش‌فرض کاربران وارد شده (logged-in) از این الزام معاف هستند -
+     * چون حساب‌شان از قبل احراز هویت شده. با تنظیم
+     * checkout_verify_require_logged_in می‌توان این معافیت را غیرفعال کرد تا
+     * کاربران وارد شده هم مثل مهمان‌ها ملزم به تایید شوند.
+     * این تابع تنها منبع تصمیم‌گیری است - هم برای رندر UI (ویجت/گیت) و هم
+     * برای enforce_verification سمت سرور - تا هرگز حالتی پیش نیاید که UI
+     * پنهان باشد ولی سرور همچنان سفارش را مسدود کند.
+     */
+    private function requires_verification_for_current_user()
+    {
+        if (!$this->is_enabled()) {
+            return false;
+        }
+        if (is_user_logged_in()) {
+            $settings = get_option('otp_verifier_settings', []);
+            return !empty($settings['checkout_verify_require_logged_in']);
+        }
+        return true;
+    }
+
     private function get_mode()
     {
         $settings = get_option('otp_verifier_settings', []);
@@ -110,7 +132,7 @@ class OTP_Verifier_Checkout_Handler
 
     public function enqueue_assets()
     {
-        if (!$this->is_enabled() || !function_exists('is_checkout') || !is_checkout()) {
+        if (!$this->requires_verification_for_current_user() || !function_exists('is_checkout') || !is_checkout()) {
             return;
         }
         if (function_exists('is_wc_endpoint_url') && is_wc_endpoint_url('order-received')) {
@@ -165,7 +187,7 @@ class OTP_Verifier_Checkout_Handler
      */
     public function render_inline_widget()
     {
-        if (!$this->is_enabled() || $this->get_mode() !== 'inline' || $this->is_block_checkout()) {
+        if (!$this->requires_verification_for_current_user() || $this->get_mode() !== 'inline' || $this->is_block_checkout()) {
             return;
         }
 ?>
@@ -190,7 +212,7 @@ class OTP_Verifier_Checkout_Handler
      */
     public function render_gate_overlay()
     {
-        if (!$this->is_enabled() || $this->get_mode() !== 'gate' || $this->is_block_checkout()) {
+        if (!$this->requires_verification_for_current_user() || $this->get_mode() !== 'gate' || $this->is_block_checkout()) {
             return;
         }
         if (!function_exists('is_checkout') || !is_checkout()) {
@@ -327,7 +349,7 @@ class OTP_Verifier_Checkout_Handler
      */
     public function enforce_verification()
     {
-        if (!$this->is_enabled()) {
+        if (!$this->requires_verification_for_current_user()) {
             return;
         }
 

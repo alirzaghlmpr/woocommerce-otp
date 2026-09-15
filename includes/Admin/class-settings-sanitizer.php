@@ -43,6 +43,7 @@ class OTP_Verifier_Settings_Sanitizer
         $output['checkout_verify_enabled'] = isset($input['checkout_verify_enabled']) ? (bool) $input['checkout_verify_enabled'] : false;
         $checkout_mode = sanitize_text_field($input['checkout_verify_mode'] ?? 'inline');
         $output['checkout_verify_mode'] = in_array($checkout_mode, ['inline', 'gate'], true) ? $checkout_mode : 'inline';
+        $output['checkout_verify_require_logged_in'] = isset($input['checkout_verify_require_logged_in']) ? (bool) $input['checkout_verify_require_logged_in'] : false;
 
         return $output;
     }

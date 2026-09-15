@@ -22,6 +22,7 @@ A lightweight, optimized WordPress plugin for OTP-based login and signup.
   - **Inline**: a verify button next to WooCommerce's own billing‑phone field (no extra field); Place Order stays disabled until verified
   - **Gate**: a full overlay blocks the checkout form entirely until the phone is verified
   - Enforced server-side (`woocommerce_checkout_process`), not just in JS — classic (shortcode) checkout only, not WooCommerce Blocks checkout
+  - Logged-in customers are exempt by default (already-authenticated accounts skip the widget/gate entirely); an "require for logged-in users too" setting extends the same requirement to them
 - **WebOTP autofill** — on supported browsers (Chrome/Android), the OTP code is read directly from the incoming SMS and filled in automatically (no copy/paste), on the login/signup page and both checkout verification modes. Requires the SMS gateway's pattern/template to end with `@yourdomain.com #code` (configured on the SMS provider's panel, not in this plugin)
 - SweetAlert2 feedback messages
 - User‑friendly OTP input flow
