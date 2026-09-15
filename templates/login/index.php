@@ -15,6 +15,8 @@ $login_button_text = $settings['login_button_text'] ?? 'ورود یا ثبت ن�
 $signup_title = $settings['signup_title'] ?? 'ایجاد حساب جدید';
 $signup_button_text = $settings['signup_button_text'] ?? 'ثبت نام';
 $login_privacy_text = $settings['login_privacy_text'] ?? 'با ثبت نام و عضویت در سایت تمام قوانین و شرایط استفاده از خدمات <span class="otp-link">افراز ادیو</span> رو پذیرفته اید';
+$phone_only_auth_enabled = !empty($settings['phone_only_auth_enabled']);
+$phone_only_label = 'ورود یا ثبت‌نام با شماره موبایل';
 
 // Get logo URL, defaulting to the plugin's SVG if empty
 $default_logo_url = OTP_VERIFIER_URL . 'templates/assets/images/svg/site-logo.svg';
@@ -58,6 +60,7 @@ $otp_frontend_config = [
     'expire'     => $otp_expire,
     'otp_length' => $otp_length,
     'assets_url' => OTP_VERIFIER_URL . 'templates/assets/',
+    'phone_only_auth' => $phone_only_auth_enabled,
     'messages'   => [
         'invalid_phone'  => 'شماره موبایل معتبر نیست.',
         'otp_sent'       => 'کد تایید ارسال شد.',
@@ -124,7 +127,7 @@ $otp_frontend_config_json = wp_json_encode(
                 </form>
                 <p class="otp-links">
                     <a id="toggleToSignup" class="otp-link">آیا اکانت ندارید؟ ثبت نام</a>
-                    <a id="toggleToPhoneLogin" class="otp-link">ورود با شماره موبایل</a>
+                    <a id="toggleToPhoneLogin" class="otp-link"><?php echo $phone_only_auth_enabled ? esc_html($phone_only_label) : 'ورود با شماره موبایل'; ?></a>
                 </p>
                 <?php if (!empty($login_privacy_text)) : ?>
                     <p class="otp-privacy"><?php echo $login_privacy_text; ?></p>
@@ -165,7 +168,7 @@ $otp_frontend_config_json = wp_json_encode(
             </div>
 
             <div id="phoneLoginStep" class="otp-step otp-hidden">
-                <h2 class="otp-title otp-title--sm">ورود با شماره موبایل</h2>
+                <h2 class="otp-title otp-title--sm"><?php echo $phone_only_auth_enabled ? esc_html($phone_only_label) : 'ورود با شماره موبایل'; ?></h2>
                 <form id="phoneLoginForm" class="otp-form">
                     <div class="otp-field">
                         <input dir="rtl" id="phoneLoginInput" type="tel" inputmode="numeric" maxlength="11"

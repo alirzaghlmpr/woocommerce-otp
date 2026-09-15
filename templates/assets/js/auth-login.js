@@ -45,6 +45,9 @@
     const AJAX_URL = config.ajaxurl || "/wp-admin/admin-ajax.php";
     const NONCE = config.nonce || "";
     const MSG = config.messages || {};
+    // اگر فعال باشد، تب "ورود با شماره موبایل" هم ورود کاربران قبلی و هم
+    // ثبت‌نام کاربران جدید را بدون نام کاربری/رمز عبور انجام می‌دهد.
+    const PHONE_ONLY_AUTH = !!config.phone_only_auth;
 
     // ==================== State ====================
     let resendInterval = null;
@@ -414,7 +417,8 @@
           action: "send_otp",
           security: NONCE,
           phone: phone,
-          login_only: flow === "phone" ? 1 : 0,
+          login_only: flow === "phone" && !PHONE_ONLY_AUTH ? 1 : 0,
+          phone_only_auth: flow === "phone" && PHONE_ONLY_AUTH ? 1 : 0,
           username: flow === "signup" ? signupPayload.username : "",
         },
         timeout: 15000, // 15 second timeout
@@ -522,7 +526,7 @@
           otp: code,
           username: signupPayload.username,
           password: signupPayload.password,
-          login_only: lastFlow === "phone" ? 1 : 0,
+          login_only: lastFlow === "phone" && !PHONE_ONLY_AUTH ? 1 : 0,
         },
         timeout: 15000,
       })

@@ -189,6 +189,11 @@ class OTP_AJAX_Handler
 
             $phone = isset($_POST['phone']) ? sanitize_text_field($_POST['phone']) : '';
             $login_only = !empty($_POST['login_only']);
+            // حالت «فقط شماره موبایل»: هم ورود و هم ثبت‌نام بدون نام کاربری/رمز عبور.
+            // چون نام کاربری اصلاً وجود ندارد، چک‌های یکتایی نام‌کاربری/شماره زیر
+            // (که مخصوص فرم ثبت‌نام کلاسیک هستند) باید برای این حالت نادیده گرفته شوند -
+            // در غیر این صورت، ورود دوباره‌ی یک کاربر قدیمی با همین حالت به اشتباه خطا می‌دهد.
+            $phone_only_auth = !empty($_POST['phone_only_auth']);
             $raw_username = isset($_POST['username']) ? wp_unslash($_POST['username']) : '';
             $username = sanitize_user($raw_username, true);
             otp_verifier_log("ℹ️ handle_send_otp: Raw phone input - " . otp_verifier_mask_phone($phone));
@@ -203,12 +208,12 @@ class OTP_AJAX_Handler
             }
 
             // اگر در حالت ثبت‌نام هستیم و نام کاربری ارسال شده اما بعد از sanitize خالی شده
-            if (!$login_only && !empty($raw_username) && empty($username)) {
+            if (!$login_only && !$phone_only_auth && !empty($raw_username) && empty($username)) {
                 wp_send_json_error(['message' => 'نام کاربری وارد شده معتبر نیست. لطفاً از حروف و اعداد لاتین استفاده کنید.']);
                 return;
             }
 
-            if (!$login_only && !empty($username)) {
+            if (!$login_only && !$phone_only_auth && !empty($username)) {
                 $existing_user = get_user_by('login', $username);
                 if ($existing_user) {
                     $existing_phone = get_user_meta($existing_user->ID, 'phone_number', true);
@@ -228,7 +233,9 @@ class OTP_AJAX_Handler
             }
 
             // جلوگیری از ارسال کد برای شماره‌ای که قبلاً با نام کاربری دیگری ثبت شده
-            if (!$login_only) {
+            // (این چک فقط برای ثبت‌نام کلاسیک معنی دارد؛ در phone_only_auth شماره‌ی
+            // قبلاً ثبت‌شده باید به سادگی کاربر را وارد کند، نه خطا بدهد)
+            if (!$login_only && !$phone_only_auth) {
                 $existing_phone_user = get_users([
                     'meta_key' => 'phone_number',
                     'meta_value' => $phone,

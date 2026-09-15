@@ -206,6 +206,18 @@ class OTP_Verifier_Settings_Page
                         </th>
                     </tr>
                     <tr>
+                        <th>ورود/ثبت‌نام فقط با شماره موبایل</th>
+                        <td>
+                            <label>
+                                <input type="checkbox"
+                                    name="<?php echo esc_attr($this->option_name); ?>[phone_only_auth_enabled]"
+                                    value="1" <?php checked($settings['phone_only_auth_enabled'] ?? false, 1); ?>>
+                                فعال باشد
+                            </label>
+                            <p class="description">اگر فعال باشد، یک گزینه اضافه در صفحه ورود نمایش داده می‌شود که با آن کاربر فقط با شماره موبایل (بدون نام کاربری و رمز عبور) هم می‌تواند وارد شود و هم ثبت‌نام کند. فرم‌های ورود با رمز عبور و ثبت‌نام با نام کاربری/رمز همچنان در دسترس باقی می‌مانند.</p>
+                        </td>
+                    </tr>
+                    <tr>
                         <th>عنوان صفحه ورود</th>
                         <td>
                             <input type="text"

@@ -20,6 +20,8 @@ class OTP_Verifier_Settings_Sanitizer
         $output['otp_length']   = absint($input['otp_length'] ?? 0);
         $output['otp_expire']   = absint($input['otp_expire'] ?? 120);
 
+        $output['phone_only_auth_enabled'] = isset($input['phone_only_auth_enabled']) ? (bool) $input['phone_only_auth_enabled'] : false;
+
         $output['login_title']        = sanitize_text_field($input['login_title'] ?? 'ورود | ثبت نام');
         $output['login_button_text']  = sanitize_text_field($input['login_button_text'] ?? 'ورود یا ثبت نام');
         $output['signup_title']       = sanitize_text_field($input['signup_title'] ?? 'ایجاد حساب جدید');
