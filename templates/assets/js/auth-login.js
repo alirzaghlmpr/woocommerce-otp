@@ -56,6 +56,53 @@
     const ASSETS_URL = config.assets_url || "";
     const eyeOpen = ASSETS_URL + "images/svg/eye-login-page.svg";
     const eyeClosed = ASSETS_URL + "images/svg/eye-close-login-page.svg";
+    let webOtpController = null;
+
+    /**
+     * WebOTP API: روی مرورگرهای پشتیبانی‌شونده (Chrome/Android)، وقتی پیامکی با
+     * فرمت `@domain #code` (متن پترن پیامکی باید با این پسوند به دامنه سایت ختم
+     * شود) دریافت شود، مرورگر خودش کد را به این Promise می‌دهد - بدون کپی/پیست
+     * دستی. iOS Safari معادل JS ندارد و صرفاً از طریق attribute
+     * autocomplete="one-time-code" روی اینپوت‌ها پیشنهاد Autofill می‌دهد.
+     */
+    function startWebOtpAutofill() {
+      if (!("OTPCredential" in window) || !navigator.credentials) {
+        return;
+      }
+      if (webOtpController) {
+        webOtpController.abort();
+      }
+      webOtpController = new AbortController();
+
+      navigator.credentials
+        .get({
+          otp: { transport: ["sms"] },
+          signal: webOtpController.signal,
+        })
+        .then(function (otpCredential) {
+          if (!otpCredential || !otpCredential.code) return;
+          const digits = otpCredential.code.replace(/\D/g, "").slice(0, OTP_LENGTH);
+          if (!digits) return;
+
+          const $inputs = $otpInputsContainer.find("input");
+          for (let i = 0; i < digits.length && i < $inputs.length; i++) {
+            $inputs.eq(i).val(digits[i]);
+          }
+          if (digits.length === OTP_LENGTH) {
+            $verifyOtpBtn.trigger("click");
+          }
+        })
+        .catch(function () {
+          // Aborted / unsupported / no matching SMS - manual entry still works.
+        });
+    }
+
+    function stopWebOtpAutofill() {
+      if (webOtpController) {
+        webOtpController.abort();
+        webOtpController = null;
+      }
+    }
 
     function showFlow(flow) {
       $loginStep.addClass("otp-hidden");
@@ -418,6 +465,9 @@
 
             // ریست تعداد تلاش‌های verify
             verifyAttempts = 0;
+
+            // شروع گوش دادن برای Autofill خودکار کد از پیامک (WebOTP API)
+            startWebOtpAutofill();
           } else {
             // مدیریت خطاها
             const errorMsg =
@@ -488,6 +538,7 @@
 
             // پاک کردن timer از localStorage
             localStorage.removeItem(`otp_timer_${phone}`);
+            stopWebOtpAutofill();
 
             // Redirect
             const redirect = response.data?.redirect || window.location.href;
@@ -524,6 +575,7 @@
                 $otpStep.addClass("otp-hidden");
                 $signupStep.removeClass("otp-hidden");
                 stopResendCooldown(phone);
+                stopWebOtpAutofill();
               }, 3000);
             } else {
               // پاک کردن input ها برای تلاش مجدد
@@ -715,6 +767,7 @@
     $backBtn.on("click", function () {
       showFlow(lastFlow);
       stopResendCooldown(lastPhone);
+      stopWebOtpAutofill();
       verifyAttempts = 0;
       $otpMsg.addClass("otp-hidden").text("");
     });

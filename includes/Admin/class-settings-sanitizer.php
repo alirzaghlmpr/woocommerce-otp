@@ -32,7 +32,15 @@ class OTP_Verifier_Settings_Sanitizer
         $output['login_logo_height']  = sanitize_text_field($input['login_logo_height'] ?? '55px');
         $output['login_bg_image_url'] = esc_url_raw($input['login_bg_image_url'] ?? '');
 
+        $overlay_color = sanitize_hex_color($input['login_bg_overlay_color'] ?? '');
+        $output['login_bg_overlay_color']   = $overlay_color ? $overlay_color : '#000000';
+        $output['login_bg_overlay_opacity'] = max(0, min(100, absint($input['login_bg_overlay_opacity'] ?? 0)));
+
         $output['login_custom_css']   = strip_tags($input['login_custom_css'] ?? '');
+
+        $output['checkout_verify_enabled'] = isset($input['checkout_verify_enabled']) ? (bool) $input['checkout_verify_enabled'] : false;
+        $checkout_mode = sanitize_text_field($input['checkout_verify_mode'] ?? 'inline');
+        $output['checkout_verify_mode'] = in_array($checkout_mode, ['inline', 'gate'], true) ? $checkout_mode : 'inline';
 
         return $output;
     }

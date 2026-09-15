@@ -24,16 +24,31 @@ $login_logo_width = $settings['login_logo_width'] ?? '200px';
 $login_logo_height = $settings['login_logo_height'] ?? '55px';
 $login_custom_css = $settings['login_custom_css'] ?? '';
 $login_bg_image_url = $settings['login_bg_image_url'] ?? '';
+$login_bg_overlay_color = $settings['login_bg_overlay_color'] ?? '#000000';
+$login_bg_overlay_opacity = isset($settings['login_bg_overlay_opacity']) ? max(0, min(100, absint($settings['login_bg_overlay_opacity']))) : 0;
+
+// تصویر پس‌زمینه مؤثر: تصویر سفارشی در صورت وجود، در غیر این صورت تصویر پیش‌فرض
+// (همان تصویری که کلاس CSS .auth-login به صورت پیش‌فرض نمایش می‌دهد). این مسیر را
+// صریحاً محاسبه می‌کنیم تا وقتی پوشش (overlay) تنظیم شده، بتوانیم آن را روی تصویر
+// پیش‌فرض هم لایه‌گذاری کنیم؛ چون inline style روی body، کلاس CSS را override می‌کند.
+$default_bg_image_url = OTP_VERIFIER_URL . 'templates/assets/images/auth-login/login-background.jpg';
+$effective_bg_image_url = !empty($login_bg_image_url) ? esc_url($login_bg_image_url) : esc_url($default_bg_image_url);
+
+$bg_image_layers = [];
+if ($login_bg_overlay_opacity > 0 && preg_match('/^#([0-9a-fA-F]{6})$/', $login_bg_overlay_color, $hex_match)) {
+    $overlay_rgb = sscanf($hex_match[1], '%02x%02x%02x');
+    $overlay_rgba = sprintf('rgba(%d, %d, %d, %s)', $overlay_rgb[0], $overlay_rgb[1], $overlay_rgb[2], round($login_bg_overlay_opacity / 100, 2));
+    $bg_image_layers[] = "linear-gradient({$overlay_rgba}, {$overlay_rgba})";
+}
+$bg_image_layers[] = "url('{$effective_bg_image_url}')";
 
 $body_styles = [];
-if (!empty($login_bg_image_url)) {
-    $body_styles[] = "background-image: url('" . esc_url($login_bg_image_url) . "');";
-    $body_styles[] = 'background-size: cover;';
-    $body_styles[] = 'background-position: center;';
-    $body_styles[] = 'background-repeat: no-repeat;';
-}
+$body_styles[] = 'background-image: ' . implode(', ', $bg_image_layers) . ';';
+$body_styles[] = 'background-size: cover;';
+$body_styles[] = 'background-position: center;';
+$body_styles[] = 'background-repeat: no-repeat;';
 
-$body_style_attr = !empty($body_styles) ? ' style="' . esc_attr(implode(' ', $body_styles)) . '"' : '';
+$body_style_attr = ' style="' . esc_attr(implode(' ', $body_styles)) . '"';
 
 $otp_expire = isset($settings['otp_expire']) ? absint($settings['otp_expire']) : 120;
 $otp_length = isset($settings['otp_length']) ? absint($settings['otp_length']) : 6;

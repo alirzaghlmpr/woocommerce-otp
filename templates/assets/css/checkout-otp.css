@@ -1,0 +1,112 @@
+.otp-checkout-widget {
+  margin: 10px 0 16px;
+}
+
+.otp-checkout-widget__row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.otp-checkout-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  background: #2d264b;
+  color: #fff;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.otp-checkout-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.otp-checkout-link {
+  background: none;
+  border: none;
+  color: #2d264b;
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px;
+}
+
+.otp-checkout-link:disabled {
+  color: #999;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
+.otp-checkout-code-input {
+  padding: 8px 10px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 14px;
+  max-width: 160px;
+}
+
+.otp-checkout-status {
+  font-size: 12px;
+}
+
+.otp-checkout-status--verified {
+  color: #1a7f37;
+  font-weight: 600;
+}
+
+.otp-checkout-timer {
+  font-size: 12px;
+  color: #666;
+}
+
+.otp-checkout-msg {
+  font-size: 12px;
+  color: #c00;
+  margin-top: 6px;
+}
+
+.otp-checkout-hidden {
+  display: none !important;
+}
+
+/* Gate overlay */
+.otp-checkout-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.otp-checkout-gate__card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 380px;
+  width: 100%;
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.2);
+}
+
+.otp-checkout-gate__title {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.otp-checkout-gate__desc {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: #555;
+}
+
+body.otp-checkout-locked .woocommerce-checkout {
+  filter: blur(3px);
+  pointer-events: none;
+  user-select: none;
+}

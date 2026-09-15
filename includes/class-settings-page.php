@@ -296,12 +296,57 @@ class OTP_Verifier_Settings_Page
                             <p class="description">فقط آدرس تصویر را وارد کنید (آپلود انجام نمی‌شود). اگر خالی باشد، تصویر پیش‌فرض استفاده می‌شود.</p>
                         </td>
                     </tr>
+                    <tr>
+                        <th>پوشش (Overlay) روی تصویر پس‌زمینه</th>
+                        <td>
+                            <input type="color"
+                                name="<?php echo esc_attr($this->option_name); ?>[login_bg_overlay_color]"
+                                value="<?php echo esc_attr($settings['login_bg_overlay_color'] ?? '#000000'); ?>">
+                            <label style="margin-inline-start:12px;">
+                                شفافیت (٪):
+                                <input type="number" min="0" max="100"
+                                    name="<?php echo esc_attr($this->option_name); ?>[login_bg_overlay_opacity]"
+                                    value="<?php echo esc_attr($settings['login_bg_overlay_opacity'] ?? 0); ?>"
+                                    style="width:70px;">
+                            </label>
+                            <p class="description">اگر شفافیت بیشتر از صفر باشد، یک پوشش رنگی روی تصویر پس‌زمینه صفحه ورود (تصویر سفارشی یا پیش‌فرض) اعمال می‌شود، برای خوانایی بهتر محتوا.</p>
+                        </td>
+                    </tr>
 
                     <tr>
                         <th>CSS اختصاصی صفحه ورود</th>
                         <td>
                             <textarea name="<?php echo esc_attr($this->option_name); ?>[login_custom_css]" rows="5" style="width: 100%; direction:ltr; font-family:monospace;" placeholder=".my-class { color: red; }"><?php echo esc_textarea($settings['login_custom_css'] ?? ''); ?></textarea>
                             <p class="description">کدهای CSS را بدون تگ &lt;style&gt; وارد کنید.</p>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <th colspan="2">
+                            <hr style="margin: 10px 0;">
+                            <h2>تایید شماره موبایل در تسویه‌حساب (Checkout)</h2>
+                        </th>
+                    </tr>
+                    <tr>
+                        <th>فعال‌سازی تایید شماره موبایل در تسویه‌حساب</th>
+                        <td>
+                            <label>
+                                <input type="checkbox"
+                                    name="<?php echo esc_attr($this->option_name); ?>[checkout_verify_enabled]"
+                                    value="1" <?php checked($settings['checkout_verify_enabled'] ?? false, 1); ?>>
+                                فعال باشد
+                            </label>
+                            <p class="description">اگر فعال باشد، مشتری باید شماره موبایل خود را با کد تایید (OTP) در تسویه‌حساب تایید کند.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>حالت تایید</th>
+                        <td>
+                            <select name="<?php echo esc_attr($this->option_name); ?>[checkout_verify_mode]">
+                                <option value="inline" <?php selected($settings['checkout_verify_mode'] ?? 'inline', 'inline'); ?>>داخل فرم تسویه‌حساب (کنار فیلد شماره موبایل، بدون فیلد اضافه)</option>
+                                <option value="gate" <?php selected($settings['checkout_verify_mode'] ?? 'inline', 'gate'); ?>>قفل کامل - قبل از مشاهده فرم تسویه‌حساب باید تایید شود</option>
+                            </select>
+                            <p class="description">«داخل فرم»: کنار فیلد استاندارد شماره موبایل ووکامرس یک دکمه ارسال/تایید کد نمایش داده می‌شود و دکمه ثبت سفارش تا تایید شدن غیرفعال است. «قفل کامل»: قبل از نمایش فرم تسویه‌حساب، یک پنجره تایید شماره موبایل نمایش داده می‌شود.</p>
                         </td>
                     </tr>
 

@@ -1,6 +1,6 @@
 ﻿# OTP Verifier
 
-![Version](https://img.shields.io/badge/Version-1.1.0-green)
+![Version](https://img.shields.io/badge/Version-1.2.0-green)
 ![WordPress](https://img.shields.io/badge/WordPress-5.8%2B-blue)
 ![WooCommerce](https://img.shields.io/badge/WooCommerce-6.0%2B-purple)
 ![PHP](https://img.shields.io/badge/PHP-7.4%2B-777bb4)
@@ -17,6 +17,12 @@ A lightweight, optimized WordPress plugin for OTP-based login and signup.
 ## Features
 - OTP login and signup (phone-based)
 - Customizable login page (logo, titles, button text, background)
+- Optional color overlay on the login background image (color + opacity), for readability
+- **WooCommerce checkout phone verification** — verify the customer's phone with an OTP before an order can be placed, in one of two admin-selectable modes:
+  - **Inline**: a verify button next to WooCommerce's own billing‑phone field (no extra field); Place Order stays disabled until verified
+  - **Gate**: a full overlay blocks the checkout form entirely until the phone is verified
+  - Enforced server-side (`woocommerce_checkout_process`), not just in JS — classic (shortcode) checkout only, not WooCommerce Blocks checkout
+- **WebOTP autofill** — on supported browsers (Chrome/Android), the OTP code is read directly from the incoming SMS and filled in automatically (no copy/paste), on the login/signup page and both checkout verification modes. Requires the SMS gateway's pattern/template to end with `@yourdomain.com #code` (configured on the SMS provider's panel, not in this plugin)
 - SweetAlert2 feedback messages
 - User‑friendly OTP input flow
 - AJAX-powered verification
@@ -86,6 +92,11 @@ Login UI
 - Enhanced analytics and logging
 
 ## Changelog
+
+### 1.2.0
+- **Feature:** WooCommerce checkout phone verification — inline (next to the billing-phone field) or gate (full overlay before checkout) mode, admin-selectable, enforced server-side
+- **Feature:** optional color overlay (color + opacity) on the login page background image
+- **Feature:** WebOTP autofill on login/signup and both checkout verification modes — the OTP code is read from the incoming SMS automatically on supported browsers, no manual copy/paste (requires the SMS pattern to end with `@yourdomain.com #code`, set on the gateway's panel)
 
 ### 1.1.0
 - **Security:** OTP codes are now hashed (HMAC-SHA256) instead of stored in plaintext
