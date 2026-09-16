@@ -1,6 +1,6 @@
 ﻿# OTP Verifier
 
-![Version](https://img.shields.io/badge/Version-1.3.0-green)
+![Version](https://img.shields.io/badge/Version-1.3.1-green)
 ![WordPress](https://img.shields.io/badge/WordPress-5.8%2B-blue)
 ![WooCommerce](https://img.shields.io/badge/WooCommerce-6.0%2B-purple)
 ![PHP](https://img.shields.io/badge/PHP-7.4%2B-777bb4)
@@ -93,6 +93,9 @@ Login UI
 - Enhanced analytics and logging
 
 ## Changelog
+
+### 1.3.1
+- **Fix:** if the `billing_phone` field was missing from checkout entirely (removed by a theme/site config), checkout phone verification silently couldn't work - the inline widget had nothing to attach to, and in gate mode the verified phone could never actually be submitted with the order (the JS sets `#billing_phone`'s value, which is a no-op if that field doesn't exist), so orders would be rejected even after a successful verification. Now, whenever checkout verification is required, the plugin re-adds `billing_phone` to the checkout fields if it's missing, and marks it required if it exists but was optional.
 
 ### 1.3.0
 - **Fix:** the inline checkout verification widget was appearing after the entire billing fields block (at the very end, past email) instead of right below the phone field. Switched from the `woocommerce_after_checkout_billing_form` action to appending onto WooCommerce's own `woocommerce_form_field_tel` filter output for `billing_phone`, which places the widget as a direct sibling immediately after that field.

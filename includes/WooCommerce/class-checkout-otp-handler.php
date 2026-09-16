@@ -32,6 +32,14 @@ class OTP_Verifier_Checkout_Handler
         add_action('wp_ajax_nopriv_otp_checkout_verify', [$this, 'handle_verify_otp']);
 
         add_action('wp_enqueue_scripts', [$this, 'enqueue_assets']);
+        // اگر شماره موبایل تنظیم شده باشد که تایید شود، اما فیلد billing_phone
+        // از فرم چک‌اوت حذف/غیرفعال شده باشد (بعضی سایت‌ها این کار را می‌کنند)،
+        // بدون این فیلد نه ویجت inline جایی برای اتصال دارد و نه، مهم‌تر، حالت
+        // gate می‌تواند شماره‌ی تایید‌شده را submit کند (چون JS مقدار را روی
+        // #billing_phone می‌گذارد؛ اگر این فیلد در DOM نباشد، آن مقدار هرگز پست
+        // نمی‌شود و enforce_verification سفارش را رد می‌کند حتی بعد از تایید
+        // موفق). پس همیشه فیلد را دوباره اضافه می‌کنیم اگر غایب باشد.
+        add_filter('woocommerce_checkout_fields', [$this, 'ensure_billing_phone_field_exists']);
         // billing_phone is type="tel" in WooCommerce core - این فیلتر روی HTML
         // نهایی‌ساخته‌شده‌ی هر فیلد اجرا می‌شود (نه description که از wp_kses_post
         // عبور می‌کند و ممکن است <button>/<input> ویجت را حذف کند)، پس با append
@@ -90,6 +98,37 @@ class OTP_Verifier_Checkout_Handler
         $settings = get_option('otp_verifier_settings', []);
         $mode = $settings['checkout_verify_mode'] ?? 'inline';
         return in_array($mode, ['inline', 'gate'], true) ? $mode : 'inline';
+    }
+
+    /**
+     * اگر تایید شماره موبایل در تسویه‌حساب لازم است اما فیلد billing_phone از
+     * فرم حذف/غیرفعال شده (مثلاً توسط تم یا یک افزونه‌ی دیگر)، آن را دوباره
+     * اضافه می‌کنیم - و چون تایید اجباری است، آن را required هم می‌کنیم (حتی
+     * اگر از قبل با required=false وجود داشته باشد) تا برچسب فیلد با رفتار
+     * واقعی چک‌اوت (نمی‌توانی بدون آن سفارش ثبت کنی) همخوانی داشته باشد.
+     */
+    public function ensure_billing_phone_field_exists($fields)
+    {
+        if (!$this->requires_verification_for_current_user()) {
+            return $fields;
+        }
+
+        if (empty($fields['billing']['billing_phone'])) {
+            $fields['billing']['billing_phone'] = [
+                'label'        => __('Phone', 'woocommerce'),
+                'type'         => 'tel',
+                'required'     => true,
+                'class'        => ['form-row-wide'],
+                'validate'     => ['phone'],
+                'autocomplete' => 'tel',
+                'priority'     => 100,
+            ];
+            otp_verifier_log('ℹ️ Checkout OTP: فیلد billing_phone در فرم چک‌اوت موجود نبود - چون تایید شماره فعال است، دوباره اضافه شد.');
+        } else {
+            $fields['billing']['billing_phone']['required'] = true;
+        }
+
+        return $fields;
     }
 
     private function get_verified_phone()
