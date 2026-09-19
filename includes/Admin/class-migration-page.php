@@ -6,7 +6,7 @@ if (!defined('ABSPATH')) {
 require_once OTP_VERIFIER_PATH . 'includes/Admin/class-meta-migrator.php';
 
 /**
- * صفحهٔ «مهاجرت کاربران»: پیدا کردن کلید متا → پیش‌نمایش (بدون تغییر) → تایید و اجرا (+ امکان بازگردانی).
+ * صفحهٔ «مهاجرت کاربران»: پیدا کردن کلید(های) متا → پیش‌نمایش (بدون تغییر) → تایید و اجرا (+ امکان بازگردانی).
  * همهٔ عملیات از طریق AJAX و با nonce و دسترسی manage_options انجام می‌شود.
  */
 class OTP_Verifier_Migration_Page
@@ -47,14 +47,14 @@ class OTP_Verifier_Migration_Page
         }
     }
 
-    private function requested_key()
+    private function requested_keys()
     {
-        $key = $this->migrator->sanitize_key_name($_POST['key'] ?? '');
-        if ($key === false) {
-            wp_send_json_error(['message' => 'نام کلید متا معتبر نیست.']);
+        $keys = $this->migrator->sanitize_keys($_POST['key'] ?? '');
+        if ($keys === false) {
+            wp_send_json_error(['message' => 'نام کلیدهای متا معتبر نیست (حداکثر ' . OTP_Verifier_Meta_Migrator::MAX_KEYS . ' کلید، با کاما یا فاصله جدا شوند؛ خودِ phone_number مجاز نیست).']);
         }
 
-        return $key;
+        return $keys;
     }
 
     public function ajax_scan()
@@ -76,12 +76,13 @@ class OTP_Verifier_Migration_Page
     public function ajax_preview()
     {
         $this->guard();
-        $analysis = $this->migrator->analyze($this->requested_key());
+        $analysis = $this->migrator->analyze($this->requested_keys());
 
         wp_send_json_success([
             'html'     => $this->render_preview($analysis),
-            'key'      => $analysis['key'],
+            'keys'     => $analysis['keys'],
             'total'    => $analysis['total'],
+            'rows'     => $analysis['rows'],
             'ready'    => $analysis['counts']['ready'],
             'complete' => $analysis['complete'],
             'marked'   => $analysis['marked'],
@@ -95,13 +96,13 @@ class OTP_Verifier_Migration_Page
             wp_send_json_error(['message' => 'ابتدا تایید کنید که از دیتابیس نسخه پشتیبان گرفته‌اید.']);
         }
 
-        wp_send_json_success($this->migrator->migrate_batch($this->requested_key(), absint($_POST['after'] ?? 0)));
+        wp_send_json_success($this->migrator->migrate_batch($this->requested_keys(), absint($_POST['ki'] ?? 0), absint($_POST['after'] ?? 0)));
     }
 
     public function ajax_undo()
     {
         $this->guard();
-        wp_send_json_success($this->migrator->undo_batch($this->requested_key()));
+        wp_send_json_success($this->migrator->undo_batch($this->requested_keys()));
     }
 
     // ------------------------------------------------------------------ نمایش نتیجه‌ها (HTML امن‌شده)
@@ -113,8 +114,8 @@ class OTP_Verifier_Migration_Page
             'already_same'        => 'قبلاً ثبت شده / شماره یکسان است (بدون تغییر)',
             'has_other'           => 'کاربر از قبل شماره‌ی دیگری دارد (دست نمی‌خورد)',
             'conflict_existing'   => 'این شماره برای کاربر دیگری ثبت شده است (رد می‌شود)',
-            'duplicate_in_source' => 'شماره‌ی تکراری بین چند کاربر (فقط اولین کاربر می‌گیرد)',
-            'invalid'             => 'شماره‌ی نامعتبر (رد می‌شود)',
+            'duplicate_in_source' => 'شماره‌ی تکراری بین چند کاربر (فقط کاربرِ دارای کلید با اولویت بالاتر، و بعد قدیمی‌تر، می‌گیرد)',
+            'invalid'             => 'شماره‌ی نامعتبر در همه‌ی کلیدها (رد می‌شود)',
         ];
     }
 
@@ -126,6 +127,13 @@ class OTP_Verifier_Migration_Page
             'country_code' => '+98912… / 98912… / 0098912… (با کد کشور)',
             'formatted'    => 'با فاصله، خط تیره یا ارقام فارسی',
         ];
+    }
+
+    private function code_list(array $keys, $separator = ' ‹ ')
+    {
+        return implode($separator, array_map(function ($key) {
+            return '<code>' . esc_html($key) . '</code>';
+        }, $keys));
     }
 
     private function render_candidates(array $list)
@@ -140,7 +148,7 @@ class OTP_Verifier_Migration_Page
                 . '<td>' . esc_html(number_format_i18n($row['total'])) . '</td>'
                 . '<td>' . esc_html($row['match']) . '٪</td>'
                 . '<td><code dir="ltr">' . esc_html($row['example']) . '</code></td>'
-                . '<td><button type="button" class="button otp-mig-use-key" data-key="' . esc_attr($row['key']) . '">پیش‌نمایش این کلید</button></td></tr>';
+                . '<td><button type="button" class="button otp-mig-use-key" data-key="' . esc_attr($row['key']) . '">افزودن به فهرست</button></td></tr>';
         }
 
         return $html . '</tbody></table>';
@@ -157,7 +165,7 @@ class OTP_Verifier_Migration_Page
                     . '<td>' . esc_html(number_format_i18n($row['total'])) . '</td>'
                     . '<td><code dir="ltr">' . esc_html($row['example']) . '</code></td>'
                     . '<td>#' . esc_html($row['user_id']) . '</td>'
-                    . '<td><button type="button" class="button otp-mig-use-key" data-key="' . esc_attr($row['key']) . '">پیش‌نمایش این کلید</button></td></tr>';
+                    . '<td><button type="button" class="button otp-mig-use-key" data-key="' . esc_attr($row['key']) . '">افزودن به فهرست</button></td></tr>';
             }
             $html .= '</tbody></table>';
         } else {
@@ -175,21 +183,17 @@ class OTP_Verifier_Migration_Page
     private function render_preview(array $a)
     {
         $labels = $this->status_labels();
-        $html = '<h3>نتیجه برای کلید <code>' . esc_html($a['key']) . '</code></h3>';
+        $multi = count($a['keys']) > 1;
+        $html = '<h3>' . ($multi ? 'نتیجه برای کلیدها (به ترتیب اولویت): ' : 'نتیجه برای کلید ') . $this->code_list($a['keys']) . '</h3>';
 
-        $messages = [
-            'empty'          => 'هیچ کاربری با مقدار غیرخالی برای این کلید پیدا نشد؛ نام کلید را بررسی کنید.',
-            'unverified_key' => 'این کلید (billing/shipping) معمولاً شماره‌ای است که خود مشتری در فرم پرداخت وارد کرده و تایید نشده است. اگر کسی شماره‌ی دیگری را وارد کرده باشد، صاحب آن شماره می‌تواند با OTP وارد حساب او شود. فقط کلیدی را مهاجرت دهید که شماره در آن با کد تایید فعال شده باشد.',
-            'many_invalid'   => 'بیش از ۳۰٪ مقدارها شماره موبایل معتبر نیستند؛ مطمئن شوید کلید درست را انتخاب کرده‌اید.',
-        ];
         foreach ($a['warnings'] as $code) {
-            $html .= '<div class="notice notice-warning inline"><p>' . esc_html($messages[$code]) . '</p></div>';
+            $html .= '<div class="notice notice-warning inline"><p>' . $this->warning_html($code, $a) . '</p></div>';
         }
         if (!$a['complete']) {
             $html .= '<div class="notice notice-error inline"><p>تعداد رکوردها به حدی زیاد است که بررسی در زمان مجاز کامل نشد؛ برای امنیت، اجرا غیرفعال است.</p></div>';
         }
 
-        $html .= '<p>تعداد کاربران دارای این کلید: <strong>' . esc_html(number_format_i18n($a['total'])) . '</strong></p>';
+        $html .= '<p>تعداد کاربران دارای شماره در این کلیدها: <strong>' . esc_html(number_format_i18n($a['total'])) . '</strong></p>';
 
         $html .= '<table class="widefat striped" style="max-width:720px"><tbody>';
         foreach ($labels as $status => $label) {
@@ -197,6 +201,10 @@ class OTP_Verifier_Migration_Page
             $html .= '<tr' . $style . '><td>' . esc_html($label) . '</td><td>' . esc_html(number_format_i18n($a['counts'][$status])) . '</td></tr>';
         }
         $html .= '</tbody></table>';
+
+        if ($multi) {
+            $html .= $this->render_multi_key($a);
+        }
 
         if ($a['formats']) {
             $html .= '<h4>قالب‌های شماره که تشخیص داده شد (همه به 09xxxxxxxxx تبدیل می‌شوند)</h4><ul style="list-style:disc;margin-right:20px">';
@@ -212,14 +220,14 @@ class OTP_Verifier_Migration_Page
             if (empty($a['samples'][$status])) {
                 continue;
             }
-            $html .= '<h4>نمونه: ' . esc_html($label) . '</h4><table class="widefat striped" style="max-width:720px"><thead><tr><th>کاربر</th><th>مقدار فعلی</th><th>شماره‌ی استاندارد</th><th></th></tr></thead><tbody>';
+            $html .= '<h4>نمونه: ' . esc_html($label) . '</h4><table class="widefat striped" style="max-width:820px"><thead><tr><th>کاربر</th><th>' . ($multi ? 'کلید و مقدار فعلی' : 'مقدار فعلی') . '</th><th>شماره‌ی استاندارد</th><th></th></tr></thead><tbody>';
             foreach ($a['samples'][$status] as $item) {
-                $note = '';
+                $note = $item['nonstandard'] ? 'قالب فعلی phone_number غیراستاندارد است' : '';
                 if ($item['other_user']) {
                     $note = 'کاربر #' . $item['other_user'] . ($item['other_login'] !== '' ? ' (' . $item['other_login'] . ')' : '');
                 }
                 $html .= '<tr><td>#' . esc_html($item['user_id']) . ($item['login'] !== '' ? ' (' . esc_html($item['login']) . ')' : '') . '</td>'
-                    . '<td><code dir="ltr">' . esc_html($item['raw']) . '</code></td>'
+                    . '<td>' . ($multi ? '<code>' . esc_html($item['key']) . '</code> ' : '') . '<code dir="ltr">' . esc_html($item['raw']) . '</code></td>'
                     . '<td><code dir="ltr">' . esc_html($item['phone'] === false ? '—' : $item['phone']) . '</code></td>'
                     . '<td>' . esc_html($note) . '</td></tr>';
             }
@@ -227,10 +235,64 @@ class OTP_Verifier_Migration_Page
         }
 
         if ($a['marked'] > 0) {
-            $html .= '<p>' . esc_html(number_format_i18n($a['marked'])) . ' کاربر قبلاً با همین ابزار از این کلید مهاجرت داده شده‌اند (امکان بازگردانی پایین صفحه فعال است).</p>';
+            $html .= '<p>' . esc_html(number_format_i18n($a['marked'])) . ' کاربر قبلاً با همین ابزار از این کلیدها مهاجرت داده شده‌اند (امکان بازگردانی پایین صفحه فعال است).</p>';
         }
 
         return $html;
+    }
+
+    private function render_multi_key(array $a)
+    {
+        $html = '<h4>هر کلید چند کاربر را تامین می‌کند</h4><table class="widefat striped" style="max-width:720px"><thead><tr><th>اولویت</th><th>کلید</th><th>کاربرانی که شماره‌شان از این کلید گرفته می‌شود</th><th>از این تعداد آماده‌ی مهاجرت</th></tr></thead><tbody>';
+        foreach ($a['keys'] as $i => $key) {
+            $html .= '<tr><td>' . esc_html($i + 1) . '</td><td><code>' . esc_html($key) . '</code></td>'
+                . '<td>' . esc_html(number_format_i18n($a['by_key'][$key]['users'])) . '</td>'
+                . '<td>' . esc_html(number_format_i18n($a['by_key'][$key]['ready'])) . '</td></tr>';
+        }
+        $html .= '</tbody></table>';
+
+        $mk = $a['multi_key'];
+        $html .= '<p>کاربرانی که در بیش از یک کلید شماره‌ی معتبر دارند: <strong>' . esc_html(number_format_i18n($mk['users'])) . '</strong>'
+            . ' — با شماره‌ی یکسان در همه‌ی کلیدها: <strong>' . esc_html(number_format_i18n($mk['users'] - $mk['conflicting'])) . '</strong>'
+            . ' — با شماره‌های <em>متفاوت</em> در کلیدهای مختلف: <strong>' . esc_html(number_format_i18n($mk['conflicting'])) . '</strong>'
+            . ' (برای این‌ها شماره‌ی کلیدِ با اولویت بالاتر انتخاب می‌شود).</p>';
+
+        if (!empty($a['samples']['conflicting'])) {
+            $html .= '<h4>نمونه: کاربرانی که در کلیدهای مختلف شماره‌ی متفاوت دارند</h4><table class="widefat striped" style="max-width:820px"><thead><tr><th>کاربر</th><th>شماره‌ی انتخاب‌شده</th><th>شماره‌های دیگر (نادیده گرفته می‌شوند)</th></tr></thead><tbody>';
+            foreach ($a['samples']['conflicting'] as $item) {
+                $others = [];
+                foreach ($item['others'] as $other) {
+                    $others[] = '<code>' . esc_html($other['key']) . '</code> <code dir="ltr">' . esc_html($other['raw']) . '</code>';
+                }
+                $html .= '<tr><td>#' . esc_html($item['user_id']) . ($item['login'] !== '' ? ' (' . esc_html($item['login']) . ')' : '') . '</td>'
+                    . '<td><code>' . esc_html($item['key']) . '</code> <code dir="ltr">' . esc_html($item['raw']) . '</code></td>'
+                    . '<td>' . implode('<br>', $others) . '</td></tr>';
+            }
+            $html .= '</tbody></table>';
+        }
+
+        return $html;
+    }
+
+    private function warning_html($code, array $a)
+    {
+        switch ($code) {
+            case 'empty':
+                return esc_html('هیچ کاربری با مقدار غیرخالی برای این کلیدها پیدا نشد؛ نام کلیدها را بررسی کنید.');
+            case 'unverified_keys':
+                $parts = [];
+                foreach ($a['unverified'] as $key => $users) {
+                    $parts[] = '<code>' . esc_html($key) . '</code>: ' . esc_html(number_format_i18n($users)) . ' کاربر';
+                }
+                return esc_html('کلیدهای billing/shipping معمولاً شماره‌ای هستند که خود مشتری در فرم پرداخت وارد کرده و تایید نشده است؛ اگر کسی شماره‌ی دیگری را وارد کرده باشد، صاحب آن شماره می‌تواند با OTP وارد حساب او شود. تعداد کاربرانی که شماره‌شان فقط از این کلیدها گرفته می‌شود (هیچ کلید تاییدشده‌ای نداشته‌اند): ')
+                    . implode('، ', $parts) . esc_html('. برای امنیت بیشتر این کلیدها را از فهرست حذف کنید یا آخر فهرست بگذارید.');
+            case 'many_invalid':
+                return esc_html('بیش از ۳۰٪ کاربران شماره‌ی موبایل معتبری در این کلیدها ندارند؛ مطمئن شوید کلیدهای درست را انتخاب کرده‌اید.');
+            case 'nonstandard_existing':
+                return esc_html(number_format_i18n($a['nonstandard_existing']) . ' کاربر همین شماره را از قبل در phone_number دارند اما با قالب غیراستاندارد (مثلاً بدون صفر اول یا با +98). ورود با شماره‌ی استاندارد 09xxxxxxxxx آن‌ها را پیدا نمی‌کند؛ این ابزار آن مقدارها را تغییر نمی‌دهد.');
+        }
+
+        return '';
     }
 
     // ------------------------------------------------------------------ صفحه
@@ -252,18 +314,18 @@ class OTP_Verifier_Migration_Page
         </style>
         <div class="wrap">
             <h1>مهاجرت کاربران از افزونه‌ی OTP قبلی</h1>
-            <p>با این ابزار شماره موبایل کاربران از یک کلید user meta (که افزونه‌ی قبلی استفاده می‌کرد) به فیلد این افزونه (<code>phone_number</code>) کپی می‌شود تا کاربران قبلی با همان شماره وارد شوند.</p>
-            <p><strong>این ابزار فقط «اضافه» می‌کند:</strong> متای قبلی حذف یا تغییر نمی‌کند، شماره‌ی ثبت‌شده‌ی هیچ کاربری بازنویسی نمی‌شود و اگر یک شماره برای چند کاربر باشد فقط به اولین کاربر می‌رسد. هیچ تغییری بدون پیش‌نمایش و تایید شما انجام نمی‌شود.</p>
+            <p>با این ابزار شماره موبایل کاربران از یک یا چند کلید user meta (که افزونه‌ی قبلی استفاده می‌کرد) به فیلد این افزونه (<code>phone_number</code>) کپی می‌شود تا کاربران قبلی با همان شماره وارد شوند.</p>
+            <p><strong>این ابزار فقط «اضافه» می‌کند:</strong> متای قبلی حذف یا تغییر نمی‌کند، شماره‌ی ثبت‌شده‌ی هیچ کاربری بازنویسی نمی‌شود و اگر یک شماره برای چند کاربر باشد فقط به یکی از آن‌ها می‌رسد. هیچ تغییری بدون پیش‌نمایش و تایید شما انجام نمی‌شود.</p>
 
             <div class="otp-mig-card">
-                <h2>۱) پیدا کردن کلید متا</h2>
-                <p>اگر نام کلید را می‌دانید مستقیم به مرحله‌ی ۲ بروید. در غیر این صورت یکی از دو روش زیر را استفاده کنید (هر دو فقط می‌خوانند):</p>
+                <h2>۱) پیدا کردن کلیدهای متا</h2>
+                <p>اگر نام کلیدها را می‌دانید مستقیم به مرحله‌ی ۲ بروید. در غیر این صورت یکی از دو روش زیر را استفاده کنید (هر دو فقط می‌خوانند) و کلیدهای مناسب را «به فهرست اضافه» کنید:</p>
                 <p>
                     <button type="button" class="button" id="otp-mig-scan-btn">اسکن خودکار کلیدهایی که شبیه شماره موبایل‌اند</button>
                 </p>
                 <div id="otp-mig-scan-out" class="otp-mig-out"></div>
                 <p>
-                    <label for="otp-mig-find-number">یا شماره‌ی یک کاربر قدیمی را که می‌شناسید (مثلاً شماره‌ی خودتان) وارد کنید تا ببینید در کدام کلید ذخیره شده:</label><br>
+                    <label for="otp-mig-find-number">یا شماره‌ی یک کاربر قدیمی را که می‌شناسید (مثلاً شماره‌ی خودتان) وارد کنید تا ببینید در کدام کلیدها ذخیره شده:</label><br>
                     <input type="text" id="otp-mig-find-number" dir="ltr" placeholder="09123456789" class="regular-text">
                     <button type="button" class="button" id="otp-mig-find-btn">جستجو</button>
                 </p>
@@ -272,8 +334,9 @@ class OTP_Verifier_Migration_Page
 
             <div class="otp-mig-card">
                 <h2>۲) پیش‌نمایش</h2>
+                <p>یک یا چند کلید را با کاما جدا کنید. <strong>ترتیب = اولویت:</strong> برای هر کاربر اولین شماره‌ی معتبر به همین ترتیب انتخاب می‌شود. کلیدهایی را که شماره در آن‌ها با کد تایید فعال شده اول بنویسید و کلیدهای تاییدنشده (مثل <code>billing_phone</code>) را آخر بگذارید یا اصلاً نگذارید.</p>
                 <p>
-                    <input type="text" id="otp-mig-key" dir="ltr" placeholder="مثلاً digits_phone_no" class="regular-text">
+                    <input type="text" id="otp-mig-key" dir="ltr" placeholder="مثلاً smartlogin_mobile, digits_phone_no, user_meta_mobile" class="large-text" style="max-width:640px">
                     <button type="button" class="button button-primary" id="otp-mig-preview-btn">پیش‌نمایش (بدون هیچ تغییری)</button>
                 </p>
                 <div id="otp-mig-preview-out" class="otp-mig-out"></div>
@@ -289,8 +352,8 @@ class OTP_Verifier_Migration_Page
 
             <div class="otp-mig-card" id="otp-mig-undo" style="display:none">
                 <h2>بازگردانی</h2>
-                <p>شماره‌هایی که همین ابزار از این کلید ثبت کرده برداشته می‌شود؛ شماره‌هایی که این ابزار ثبت نکرده (مثلاً کاربرانی که خودشان با این افزونه ثبت‌نام کردند) دست نمی‌خورند. متای قبلی هیچ‌وقت تغییر نکرده است.</p>
-                <p><button type="button" class="button" id="otp-mig-undo-btn">بازگردانی مهاجرت این کلید</button></p>
+                <p>شماره‌هایی که همین ابزار از این کلیدها ثبت کرده برداشته می‌شود؛ شماره‌هایی که این ابزار ثبت نکرده (مثلاً کاربرانی که خودشان با این افزونه ثبت‌نام کردند) دست نمی‌خورند. متای قبلی هیچ‌وقت تغییر نکرده است.</p>
+                <p><button type="button" class="button" id="otp-mig-undo-btn">بازگردانی مهاجرت این کلیدها</button></p>
                 <div id="otp-mig-undo-report" class="otp-mig-out"></div>
             </div>
         </div>
@@ -331,7 +394,7 @@ class OTP_Verifier_Migration_Page
                     $('#otp-mig-run, #otp-mig-undo').hide();
                 }
 
-                function simpleSearch(action, data, $btn, $out) {
+                function simpleSearch(action, data, $out) {
                     if (busy) return;
                     setBusy(true);
                     $out.empty();
@@ -343,16 +406,17 @@ class OTP_Verifier_Migration_Page
                 }
 
                 function preview(keepReport) {
-                    var key = $.trim($('#otp-mig-key').val());
+                    var text = $.trim($('#otp-mig-key').val());
                     var $out = $('#otp-mig-preview-out');
-                    if (!key) { $out.empty().append(notice('error', 'نام کلید متا را وارد کنید.')); return $.Deferred().resolve().promise(); }
+                    if (!text) { $out.empty().append(notice('error', 'نام حداقل یک کلید متا را وارد کنید.')); return $.Deferred().resolve().promise(); }
                     hideActions();
                     if (!keepReport) { $('#otp-mig-report, #otp-mig-undo-report').empty(); }
                     $out.empty().append(notice('info', 'در حال بررسی کاربران…'));
-                    return post('preview', { key: key }).done(function(res) {
+                    return post('preview', { key: text }).done(function(res) {
                         if (!res.success) { $out.empty().append(notice('error', res.data.message)); return; }
                         $out.html(res.data.html);
                         state = res.data;
+                        state.keyText = state.keys.join(',');
                         if (state.ready > 0 && state.complete) {
                             $('#otp-mig-backup').prop('checked', false);
                             $('#otp-mig-progress').hide();
@@ -365,14 +429,17 @@ class OTP_Verifier_Migration_Page
                 }
 
                 $('#otp-mig-scan-btn').on('click', function() {
-                    simpleSearch('scan', {}, $(this), $('#otp-mig-scan-out'));
+                    simpleSearch('scan', {}, $('#otp-mig-scan-out'));
                 });
                 $('#otp-mig-find-btn').on('click', function() {
-                    simpleSearch('find', { number: $('#otp-mig-find-number').val() }, $(this), $('#otp-mig-find-out'));
+                    simpleSearch('find', { number: $('#otp-mig-find-number').val() }, $('#otp-mig-find-out'));
                 });
+                // «افزودن به فهرست»: کلید به انتهای فهرست (کمترین اولویت) اضافه می‌شود
                 $(document).on('click', '.otp-mig-use-key', function() {
-                    $('#otp-mig-key').val($(this).data('key'));
-                    $('#otp-mig-preview-btn').trigger('click');
+                    var key = String($(this).data('key'));
+                    var list = $.trim($('#otp-mig-key').val()).split(/[\s,;،]+/).filter(Boolean);
+                    if (list.indexOf(key) === -1) { list.push(key); }
+                    $('#otp-mig-key').val(list.join(', ')).trigger('input');
                     $('html, body').animate({ scrollTop: $('#otp-mig-key').offset().top - 80 }, 200);
                 });
                 $('#otp-mig-key').on('input', hideActions);
@@ -387,21 +454,21 @@ class OTP_Verifier_Migration_Page
 
                 $('#otp-mig-start-btn').on('click', function() {
                     if (busy || !state || !$('#otp-mig-backup').is(':checked')) return;
-                    if (!window.confirm('شماره‌ی ' + state.ready + ' کاربر برای کلید «' + state.key + '» به phone_number اضافه می‌شود. ادامه می‌دهید؟')) return;
+                    if (!window.confirm('شماره‌ی ' + state.ready + ' کاربر (از کلیدهای ' + state.keys.join('، ') + ') به phone_number اضافه می‌شود. ادامه می‌دهید؟')) return;
 
-                    var key = state.key, total = state.total; // ویرایش کادر کلید در حین اجرا نباید اجرا را خراب کند
+                    var keyText = state.keyText, total = state.rows; // ویرایش کادر کلیدها در حین اجرا نباید اجرا را خراب کند
                     var acc = { processed: 0, migrated: 0, failed: 0 };
                     var $bar = $('#otp-mig-progress').attr('max', Math.max(total, 1)).val(0).show();
                     var $report = $('#otp-mig-report').empty();
                     setBusy(true);
 
-                    (function next(after) {
-                        post('run', { key: key, after: after, backup: 1 }).done(function(res) {
+                    (function next(ki, after) {
+                        post('run', { key: keyText, ki: ki, after: after, backup: 1 }).done(function(res) {
                             if (!res.success) { $report.append(notice('error', res.data.message)); setBusy(false); return; }
                             var d = res.data;
                             acc.processed += d.processed; acc.migrated += d.migrated; acc.failed += d.failed;
                             $bar.attr('max', Math.max(total, acc.processed)).val(acc.processed);
-                            if (!d.done) { next(d.last_id); return; }
+                            if (!d.done) { next(d.next_key_index, d.last_id); return; }
                             $report.empty().append(notice(acc.failed ? 'warning' : 'success',
                                 'مهاجرت تمام شد: ' + acc.migrated + ' کاربر مهاجرت داده شد' + (acc.failed ? '، ' + acc.failed + ' مورد با خطا مواجه شد (جزئیات در لاگ)' : '') + '.'));
                             preview(true).always(function() { setBusy(false); });
@@ -409,18 +476,18 @@ class OTP_Verifier_Migration_Page
                             $report.append(notice('error', errorText(xhr) + ' می‌توانید دوباره «شروع مهاجرت» را بزنید؛ کاربرانِ انجام‌شده دوباره تغییر نمی‌کنند.'));
                             setBusy(false);
                         });
-                    })(0);
+                    })(0, 0);
                 });
 
                 $('#otp-mig-undo-btn').on('click', function() {
                     if (busy || !state) return;
-                    if (!window.confirm('شماره‌هایی که این ابزار از کلید «' + state.key + '» ثبت کرده برداشته می‌شود. ادامه می‌دهید؟')) return;
-                    var key = state.key;
+                    if (!window.confirm('شماره‌هایی که این ابزار از کلیدهای ' + state.keys.join('، ') + ' ثبت کرده برداشته می‌شود. ادامه می‌دهید؟')) return;
+                    var keyText = state.keyText;
                     var removed = 0;
                     var $report = $('#otp-mig-undo-report').empty();
                     setBusy(true);
                     (function next() {
-                        post('undo', { key: key }).done(function(res) {
+                        post('undo', { key: keyText }).done(function(res) {
                             if (!res.success) { $report.append(notice('error', res.data.message)); setBusy(false); return; }
                             removed += res.data.removed;
                             if (!res.data.done) { next(); return; }
