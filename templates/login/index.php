@@ -16,7 +16,6 @@ $signup_title = $settings['signup_title'] ?? 'ایجاد حساب جدید';
 $signup_button_text = $settings['signup_button_text'] ?? 'ثبت نام';
 $login_privacy_text = $settings['login_privacy_text'] ?? 'با ثبت نام و عضویت در سایت تمام قوانین و شرایط استفاده از خدمات <span class="otp-link">افراز ادیو</span> رو پذیرفته اید';
 $phone_only_auth_enabled = !empty($settings['phone_only_auth_enabled']);
-$phone_only_label = 'ورود یا ثبت‌نام با شماره موبایل';
 
 // Get logo URL, defaulting to the plugin's SVG if empty
 $default_logo_url = OTP_VERIFIER_URL . 'templates/assets/images/svg/site-logo.svg';
@@ -106,6 +105,7 @@ $otp_frontend_config_json = wp_json_encode(
                 </a>
             </div>
 
+            <?php if (!$phone_only_auth_enabled) : ?>
             <div id="loginStep" class="otp-step">
                 <h1 class="otp-title"><?php echo esc_html($login_title); ?></h1>
                 <form id="passwordLoginForm" class="otp-form">
@@ -127,7 +127,7 @@ $otp_frontend_config_json = wp_json_encode(
                 </form>
                 <p class="otp-links">
                     <a id="toggleToSignup" class="otp-link">آیا اکانت ندارید؟ ثبت نام</a>
-                    <a id="toggleToPhoneLogin" class="otp-link"><?php echo $phone_only_auth_enabled ? esc_html($phone_only_label) : 'ورود با شماره موبایل'; ?></a>
+                    <a id="toggleToPhoneLogin" class="otp-link">ورود با شماره موبایل</a>
                 </p>
                 <?php if (!empty($login_privacy_text)) : ?>
                     <p class="otp-privacy"><?php echo $login_privacy_text; ?></p>
@@ -166,9 +166,15 @@ $otp_frontend_config_json = wp_json_encode(
                     <a id="toggleToLogin" class="otp-link">حساب دارید؟ ورود</a>
                 </p>
             </div>
+            <?php endif; ?>
 
-            <div id="phoneLoginStep" class="otp-step otp-hidden">
-                <h2 class="otp-title otp-title--sm"><?php echo $phone_only_auth_enabled ? esc_html($phone_only_label) : 'ورود با شماره موبایل'; ?></h2>
+            <?php /* در حالت «فقط شماره موبایل» این تنها مرحله‌ی صفحه است: بدون فرم نام کاربری/رمز، بدون ثبت‌نام و بدون لینک‌های جابه‌جایی */ ?>
+            <div id="phoneLoginStep" class="otp-step<?php echo $phone_only_auth_enabled ? '' : ' otp-hidden'; ?>">
+                <?php if ($phone_only_auth_enabled) : ?>
+                    <h1 class="otp-title"><?php echo esc_html($login_title); ?></h1>
+                <?php else : ?>
+                    <h2 class="otp-title otp-title--sm">ورود با شماره موبایل</h2>
+                <?php endif; ?>
                 <form id="phoneLoginForm" class="otp-form">
                     <div class="otp-field">
                         <input dir="rtl" id="phoneLoginInput" type="tel" inputmode="numeric" maxlength="11"
@@ -180,9 +186,11 @@ $otp_frontend_config_json = wp_json_encode(
                 </form> <?php if (!empty($login_privacy_text)) : ?>
                     <p class="otp-privacy"><?php echo $login_privacy_text; ?></p>
                 <?php endif; ?>
-                <p class="otp-footnote">
-                    <a id="togglePhoneToLogin" class="otp-link">ورود با نام کاربری و رمز</a>
-                </p>
+                <?php if (!$phone_only_auth_enabled) : ?>
+                    <p class="otp-footnote">
+                        <a id="togglePhoneToLogin" class="otp-link">ورود با نام کاربری و رمز</a>
+                    </p>
+                <?php endif; ?>
             </div>
 
             <div id="otpStep" class="otp-step otp-hidden">

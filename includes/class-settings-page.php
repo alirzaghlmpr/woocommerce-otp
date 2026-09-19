@@ -4,18 +4,21 @@ if (!defined('ABSPATH')) exit;
 require_once OTP_VERIFIER_PATH . 'includes/Admin/class-settings-sanitizer.php';
 require_once OTP_VERIFIER_PATH . 'includes/Admin/class-digits-migrator.php';
 require_once OTP_VERIFIER_PATH . 'includes/Admin/class-sms-test-sender.php';
+require_once OTP_VERIFIER_PATH . 'includes/Admin/class-migration-page.php';
 class OTP_Verifier_Settings_Page
 {
     private $option_name = 'otp_verifier_settings';
     private $sanitizer;
     private $digits_migrator;
     private $sms_tester;
+    private $migration_page;
 
     public function __construct()
     {
         $this->sanitizer = new OTP_Verifier_Settings_Sanitizer();
         $this->digits_migrator = new OTP_Verifier_Digits_Migrator();
         $this->sms_tester = new OTP_Verifier_Sms_Test_Sender();
+        $this->migration_page = new OTP_Verifier_Migration_Page();
 
         add_action('admin_menu', [$this, 'add_admin_menu']);
         add_action('admin_init', [$this, 'register_settings']);
@@ -214,7 +217,7 @@ class OTP_Verifier_Settings_Page
                                     value="1" <?php checked($settings['phone_only_auth_enabled'] ?? false, 1); ?>>
                                 فعال باشد
                             </label>
-                            <p class="description">اگر فعال باشد، یک گزینه اضافه در صفحه ورود نمایش داده می‌شود که با آن کاربر فقط با شماره موبایل (بدون نام کاربری و رمز عبور) هم می‌تواند وارد شود و هم ثبت‌نام کند. فرم‌های ورود با رمز عبور و ثبت‌نام با نام کاربری/رمز همچنان در دسترس باقی می‌مانند.</p>
+                            <p class="description">اگر فعال باشد، صفحه ورود فقط یک فیلد شماره موبایل نمایش می‌دهد و ورود و ثبت‌نام در یک مسیر ادغام می‌شوند: کاربر فقط شماره موبایل را وارد می‌کند و کد تایید می‌گیرد؛ اگر حسابی با آن شماره وجود داشته باشد وارد می‌شود و در غیر این صورت حساب جدید ساخته می‌شود (نام کاربری حساب جدید همان شماره موبایل است). فرم‌های ورود با نام کاربری/رمز عبور و ثبت‌نام با نام کاربری/رمز در این حالت نمایش داده نمی‌شوند.</p>
                         </td>
                     </tr>
                     <tr>
@@ -410,6 +413,7 @@ class OTP_Verifier_Settings_Page
                             <p><strong>درباره این ابزار:</strong></p>
                             <p>اگر قبلاً از افزونه Digits برای ورود با شماره موبایل استفاده می‌کردید، این ابزار به شما کمک می‌کند تا شماره‌های موبایل کاربران قدیمی را به فرمت OTP Verifier مهاجرت دهید.</p>
                             <p>این ابزار تمام کاربرانی که دارای <code>digits_phone_no</code> هستند را پیدا کرده و شماره‌های آنها را به <code>phone_number</code> (با صفر اول) تبدیل می‌کند.</p>
+                            <p>برای مهاجرت از افزونه‌های دیگر (هر کلید user meta دلخواه) با پیش‌نمایش و تایید، از منوی «OTP Verifier ← مهاجرت کاربران» استفاده کنید.</p>
                             <p><strong>⚠️ توجه:</strong> این عملیات فقط یک بار لازم است. کاربرانی که بعداً با OTP Verifier ثبت‌نام کنند، به صورت خودکار مهاجرت خواهند شد.</p>
                         </td>
                     </tr>

@@ -1,6 +1,6 @@
 ﻿# OTP Verifier
 
-![Version](https://img.shields.io/badge/Version-1.3.1-green)
+![Version](https://img.shields.io/badge/Version-1.3.6-green)
 ![WordPress](https://img.shields.io/badge/WordPress-5.8%2B-blue)
 ![WooCommerce](https://img.shields.io/badge/WooCommerce-6.0%2B-purple)
 ![PHP](https://img.shields.io/badge/PHP-7.4%2B-777bb4)
@@ -55,7 +55,7 @@ A lightweight, optimized WordPress plugin for OTP-based login and signup.
 - Kavehnegar
 
 ## One‑Click Migration
-Migrate users and phone numbers from the Digits plugin with a single click.
+Migrate users and phone numbers from the Digits plugin with a single click, or from any other OTP/login plugin through *OTP Verifier -> Migrate users*: pick the user meta key that holds the phone numbers (a scan and a search by a known number help you find it), review a read-only preview, then confirm. The migration is additive, batched and can be undone.
 
 ## Requirements
 - WordPress (recommended: latest stable)
@@ -93,6 +93,27 @@ Login UI
 - Enhanced analytics and logging
 
 ## Changelog
+
+### 1.3.6
+- **Feature:** new admin page *OTP Verifier -> Migrate users* to bring users over from any other OTP/login plugin by the user meta key it stored the phone number in. Three steps: (1) find the key - an automatic scan lists the meta keys whose values look like Iranian mobile numbers, or you enter a phone number you already know and the tool tells you which key stores it; (2) enter the key and get a read-only preview: how many users, which number formats were detected (`09...`, `9...`, `+98...`, `0098...`, Persian digits, spaces/dashes - all converted to `09xxxxxxxxx`), and how many are ready / already migrated / already have another number / owned by someone else / duplicated between users / invalid, with samples of each; (3) tick the backup confirmation and start - the migration runs in small AJAX batches with a progress bar.
+- **Safety:** the migration only adds `phone_number`; the old meta is never changed, a user's existing `phone_number` is never overwritten, a number that already belongs to another user is skipped, and a number shared by several source users goes to the first one only (so phone login is never ambiguous). Preview and run share the same classification code, the run can be repeated safely, and every number it writes is marked so *Undo* removes exactly those and nothing else. All actions require the `manage_options` capability and a nonce. A warning is shown for `billing_*`/`shipping_*` keys, because those numbers are typed by customers and are not verified.
+
+### 1.3.5
+- **Change:** when "login/signup with phone number only" is enabled, the login page now shows nothing but a phone-number field. The username/password login form, the classic signup form and every link to them are no longer rendered, so login and signup are a single step: enter the number, enter the code, and you are logged in - or a new account is created if none exists for that number (its username is the phone number). Previously the option only added an extra tab next to the full forms. The heading uses the configurable login title, the button uses the configurable login button text, and the privacy text is still shown if set. Server-side handling is unchanged.
+- **Fix:** after too many wrong codes on the phone-number flow the page went back to the *signup* form (and to an empty card once that form is not rendered); it now returns to the step the user came from.
+
+### 1.3.4
+- **Change:** checkout verification (inline and gate modes) now verifies automatically as soon as the full code is in - typed, pasted, or filled by browser/keyboard autofill (e.g. the iOS SMS suggestion) - like the login page already did. Previously only a WebOTP-delivered code verified by itself; every other way of entering the code needed a tap on the verify button. Non-digit characters are dropped and Persian digits are converted while typing.
+- **Fix:** clicking the checkout verify button and then pressing Enter (or a second click) while the request was still in flight sent a duplicate verification request; the verify handler now ignores clicks while it is disabled.
+
+### 1.3.3
+- **Change:** hardened SMS-code autofill on the login/signup OTP screen. These are real defects that were reproduced in Chrome, but they were not the cause of the original "Chrome asks permission but nothing fills" report (that was a domain mismatch, see the note below): (1) every box was `maxlength="1"` with `autocomplete="one-time-code"`, so a code inserted as one string (browser autofill, keyboard SMS suggestion) kept only its first digit - or, when the browser wrote the value programmatically, left the whole code sitting in every box; now only the first box is `one-time-code`, every box accepts a whole code, and all input paths (typing, paste, autofill, keyboard suggestion, WebOTP) go through one routine that spreads the digits over the boxes and auto-verifies when complete. (2) Digits typed on a virtual (Android) keyboard or a Persian keyboard layout were ignored because only physical-key `keydown` events were handled, and Ctrl+V was blocked; input is now handled on the `input` event. (3) WebOTP only sees SMS messages that arrive *after* `navigator.credentials.get()` is called, but it was started only after the send-code request returned - and the server answers only once the gateway accepted the message, so the SMS could arrive first and the code was never delivered. Listening now starts before the SMS is requested, and a code that arrives before the boxes are on screen is filled in as soon as they appear.
+- **Fix:** checkout verification (inline and gate modes) gets the same listen-before-send behaviour and now converts Persian/Arabic-Indic digits to English digits, both for WebOTP codes and for codes typed by the user before they are sent to the server.
+- **Fix:** the front-end now clamps the OTP length to 4-6 like the server does, so a larger value in settings no longer renders boxes that can never be filled.
+- **Note:** SMS autofill only works when the last line of the SMS pattern is `@<host> #<code>` and `<host>` is exactly the host the site is opened on. Testing on one domain while the gateway pattern names another silently breaks autofill (Chrome ignores the message), so use a pattern for the host you are actually testing on.
+
+### 1.3.2
+- **Change:** WebOTP autofill (login/signup and both checkout verification modes) now logs to the browser console at each step - the resolved credential, why a code was rejected, when a box gets filled, when auto-verify triggers. Previously a failure inside the autofill handler was completely silent (nothing filled, no visible error), making it impossible to tell whether the WebOTP prompt itself failed, the code didn't parse, or the follow-up verify call was rejected. Check DevTools console (filter for `[OTP Verifier]`) when diagnosing an autofill that "does nothing."
 
 ### 1.3.1
 - **Fix:** if the `billing_phone` field was missing from checkout entirely (removed by a theme/site config), checkout phone verification silently couldn't work - the inline widget had nothing to attach to, and in gate mode the verified phone could never actually be submitted with the order (the JS sets `#billing_phone`'s value, which is a no-op if that field doesn't exist), so orders would be rejected even after a successful verification. Now, whenever checkout verification is required, the plugin re-adds `billing_phone` to the checkout fields if it's missing, and marks it required if it exists but was optional.

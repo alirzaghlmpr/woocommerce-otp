@@ -12,7 +12,8 @@
     const AJAX_URL = config.ajaxurl || "/wp-admin/admin-ajax.php";
     const NONCE = config.nonce || "";
     const MODE = config.mode || "inline";
-    const OTP_LENGTH = parseInt(config.otp_length || 6, 10);
+    // The server always issues 4-6 digit codes; keep the client in the same range.
+    const OTP_LENGTH = Math.min(6, Math.max(4, parseInt(config.otp_length || 6, 10) || 6));
     const RESEND_COOLDOWN = parseInt(config.expire || 120, 10);
     const MSG = config.messages || {};
 
@@ -28,6 +29,18 @@
 
     function validPhone(phone) {
       return /^09[0-9]{9}$/.test(phone);
+    }
+
+    // Persian/Arabic-Indic digits -> ASCII, everything else non-numeric dropped.
+    function toAsciiDigits(value) {
+      return String(value == null ? "" : value)
+        .replace(/[\u06F0-\u06F9]/g, function (c) {
+          return String(c.charCodeAt(0) - 0x06f0);
+        })
+        .replace(/[\u0660-\u0669]/g, function (c) {
+          return String(c.charCodeAt(0) - 0x0660);
+        })
+        .replace(/\D/g, "");
     }
 
     function formatTime(seconds) {
@@ -97,14 +110,86 @@
       navigator.credentials
         .get({ otp: { transport: ["sms"] }, signal: controller.signal })
         .then(function (cred) {
-          if (cred && cred.code) {
-            onCode(cred.code);
+          console.log("[OTP Verifier] Checkout WebOTP resolved:", cred);
+          const digits = toAsciiDigits(cred && cred.code).slice(0, OTP_LENGTH);
+          if (digits) {
+            onCode(digits);
+          } else {
+            console.warn("[OTP Verifier] Checkout WebOTP resolved with no usable code.", cred);
           }
         })
-        .catch(function () {
-          // Aborted / unsupported / no matching SMS - manual entry still works.
+        .catch(function (err) {
+          // Aborted on purpose (restart / success) is normal; anything else is worth
+          // a console line so a silent failure is at least visible in DevTools.
+          if (err && err.name === "AbortError") return;
+          console.warn("[OTP Verifier] Checkout WebOTP request failed:", err);
         });
       return controller;
+    }
+
+    /**
+     * WebOTP فقط پیامک‌هایی را می‌بیند که «بعد از» get() برسند، و سرور تنها وقتی جواب
+     * می‌دهد که درگاه پیامک را پذیرفته باشد - پس پیامک می‌تواند زودتر از پاسخ سرور برسد.
+     * بنابراین: begin() را قبل از درخواست ارسال صدا بزنید، و بعد از پاسخ sent() یا failed().
+     * اگر کد قبل از پاسخ رسیده باشد، بعد از نمایش ردیف کد وارد می‌شود.
+     */
+    function createWebOtpSession(fillCode) {
+      let controller = null;
+      let sending = false;
+      let earlyCode = "";
+
+      function stop() {
+        if (controller) {
+          controller.abort();
+          controller = null;
+        }
+      }
+
+      return {
+        begin: function () {
+          stop();
+          sending = true;
+          earlyCode = "";
+          controller = requestWebOtp(function (digits) {
+            if (sending) {
+              earlyCode = digits;
+              return;
+            }
+            fillCode(digits);
+          });
+        },
+        sent: function () {
+          sending = false;
+          if (earlyCode) {
+            const digits = earlyCode;
+            earlyCode = "";
+            fillCode(digits);
+          }
+        },
+        failed: function () {
+          sending = false;
+          earlyCode = "";
+          stop();
+        },
+        stop: stop,
+      };
+    }
+
+    /**
+     * کدِ تایپ‌شده / Paste‌شده / پر‌شده توسط Autofill مرورگر یا پیشنهاد کیبورد: ارقام را
+     * نرمال می‌کند و به‌محض کامل شدن خودکار تایید می‌کند (مثل صفحهٔ ورود). WebOTP مقدار را
+     * با val() می‌نویسد و خودش verify را صدا می‌زند، پس این هندلر دوباره اجرا نمی‌شود.
+     */
+    function bindAutoVerify($codeInput, $verifyBtn) {
+      $codeInput.on("input", function () {
+        const digits = toAsciiDigits(this.value).slice(0, OTP_LENGTH);
+        if (digits !== this.value) {
+          this.value = digits;
+        }
+        if (digits.length === OTP_LENGTH) {
+          $verifyBtn.trigger("click");
+        }
+      });
     }
 
     function verifyOtp(phone, code, onSuccess, onError) {
@@ -155,24 +240,11 @@
       const $timer = $('<span class="otp-checkout-timer"></span>').insertAfter($resendBtn);
 
       let lastSentPhone = "";
-      let webOtpController = null;
-
-      function startWebOtp() {
-        if (webOtpController) webOtpController.abort();
-        webOtpController = requestWebOtp(function (code) {
-          const digits = code.replace(/\D/g, "").slice(0, OTP_LENGTH);
-          if (!digits) return;
-          $codeInput.val(digits);
-          $verifyBtn.trigger("click");
-        });
-      }
-
-      function stopWebOtp() {
-        if (webOtpController) {
-          webOtpController.abort();
-          webOtpController = null;
-        }
-      }
+      const webOtp = createWebOtpSession(function (digits) {
+        console.log("[OTP Verifier] Checkout WebOTP autofilling code and auto-verifying.");
+        $codeInput.val(digits);
+        $verifyBtn.trigger("click");
+      });
 
       function showMsg(text) {
         $msg.text(text).removeClass("otp-checkout-hidden");
@@ -221,6 +293,7 @@
           return;
         }
         lastSentPhone = phone;
+        webOtp.begin();
         sendOtp(
           phone,
           $sendBtn,
@@ -228,27 +301,35 @@
             $codeRow.removeClass("otp-checkout-hidden");
             $codeInput.val("").trigger("focus");
             startCooldown($resendBtn, $timer);
-            startWebOtp();
+            webOtp.sent();
           },
-          showMsg
+          function (message) {
+            webOtp.failed();
+            showMsg(message);
+          }
         );
       });
 
       $resendBtn.on("click", function () {
         if ($resendBtn.prop("disabled") || !lastSentPhone) return;
+        webOtp.begin();
         sendOtp(
           lastSentPhone,
           $resendBtn,
           function () {
             startCooldown($resendBtn, $timer);
-            startWebOtp();
+            webOtp.sent();
           },
-          showMsg
+          function (message) {
+            webOtp.failed();
+            showMsg(message);
+          }
         );
       });
 
       $verifyBtn.on("click", function () {
-        const code = ($codeInput.val() || "").trim();
+        if ($verifyBtn.prop("disabled")) return;
+        const code = toAsciiDigits($codeInput.val());
         if (code.length < OTP_LENGTH) {
           showMsg("لطفاً کد کامل را وارد کنید.");
           return;
@@ -258,7 +339,7 @@
           lastSentPhone,
           code,
           function () {
-            stopWebOtp();
+            webOtp.stop();
             markVerified(lastSentPhone);
           },
           function (message) {
@@ -274,6 +355,8 @@
           $verifyBtn.trigger("click");
         }
       });
+
+      bindAutoVerify($codeInput, $verifyBtn);
 
       // WooCommerce replaces #order_review (which contains #place_order) via
       // AJAX whenever checkout totals refresh - re-apply the lock each time.
@@ -309,24 +392,11 @@
       }
 
       let lastSentPhone = "";
-      let webOtpController = null;
-
-      function startWebOtp() {
-        if (webOtpController) webOtpController.abort();
-        webOtpController = requestWebOtp(function (code) {
-          const digits = code.replace(/\D/g, "").slice(0, OTP_LENGTH);
-          if (!digits) return;
-          $codeInput.val(digits);
-          $verifyBtn.trigger("click");
-        });
-      }
-
-      function stopWebOtp() {
-        if (webOtpController) {
-          webOtpController.abort();
-          webOtpController = null;
-        }
-      }
+      const webOtp = createWebOtpSession(function (digits) {
+        console.log("[OTP Verifier] Checkout WebOTP autofilling code and auto-verifying.");
+        $codeInput.val(digits);
+        $verifyBtn.trigger("click");
+      });
 
       function showMsg(text) {
         $msg.text(text).removeClass("otp-checkout-hidden");
@@ -339,6 +409,7 @@
           return;
         }
         lastSentPhone = phone;
+        webOtp.begin();
         sendOtp(
           phone,
           $sendBtn,
@@ -346,28 +417,36 @@
             $codeRow.removeClass("otp-checkout-hidden");
             $codeInput.val("").trigger("focus");
             startCooldown($resendBtn, $timer);
-            startWebOtp();
+            webOtp.sent();
             $msg.addClass("otp-checkout-hidden");
           },
-          showMsg
+          function (message) {
+            webOtp.failed();
+            showMsg(message);
+          }
         );
       });
 
       $resendBtn.on("click", function () {
         if ($resendBtn.prop("disabled") || !lastSentPhone) return;
+        webOtp.begin();
         sendOtp(
           lastSentPhone,
           $resendBtn,
           function () {
             startCooldown($resendBtn, $timer);
-            startWebOtp();
+            webOtp.sent();
           },
-          showMsg
+          function (message) {
+            webOtp.failed();
+            showMsg(message);
+          }
         );
       });
 
       $verifyBtn.on("click", function () {
-        const code = ($codeInput.val() || "").trim();
+        if ($verifyBtn.prop("disabled")) return;
+        const code = toAsciiDigits($codeInput.val());
         if (code.length < OTP_LENGTH) {
           showMsg("لطفاً کد کامل را وارد کنید.");
           return;
@@ -377,7 +456,7 @@
           lastSentPhone,
           code,
           function () {
-            stopWebOtp();
+            webOtp.stop();
             verifiedPhone = lastSentPhone;
             $("#otp-checkout-gate-style").remove();
             $gate.remove();
@@ -400,6 +479,8 @@
           $verifyBtn.trigger("click");
         }
       });
+
+      bindAutoVerify($codeInput, $verifyBtn);
     }
 
     if (MODE === "gate") {
