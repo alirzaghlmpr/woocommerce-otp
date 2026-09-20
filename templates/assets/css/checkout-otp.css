@@ -1,111 +1,363 @@
-.otp-checkout-widget {
-  /* --otp-checkout-color is set inline by PHP from the admin color setting,
-     with this hardcoded value only as a fallback if that's ever missing. */
+/* Checkout phone verification (inline widget + gate step).
+   Look and feel mirror the login/signup page: rounded gray fields, a full-width primary button, OTP boxes.
+
+   The primary color is the admin's "checkout color" setting. PHP sets it inline as --otp-checkout-color
+   (and --otp-checkout-on-color for the text on top of it); the fallbacks below are only used if that is ever missing.
+
+   Everything is scoped under .otp-checkout-scope, and the properties that decide how the UI looks (background,
+   text color, border, radius) use !important: themes routinely style every <button>/<input> with equal or higher
+   specificity, which is what made the chosen button color disappear on some sites. */
+
+.otp-checkout-scope {
   --otp-checkout-color: #2d264b;
-  margin: 16px 0 20px;
+  --otp-checkout-on-color: #ffffff;
+  color: #374151;
+  font-family: inherit;
+  line-height: 1.6;
 }
 
-.otp-checkout-widget__row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 14px;
-  margin-bottom: 16px;
+.otp-checkout-scope *,
+.otp-checkout-scope *::before,
+.otp-checkout-scope *::after {
+  box-sizing: border-box;
 }
 
-.otp-checkout-widget__row:last-child {
-  margin-bottom: 0;
-}
-
-.otp-checkout-btn {
-  padding: 10px 22px;
-  border: none;
-  border-radius: 6px;
-  background: var(--otp-checkout-color, #2d264b);
-  color: #fff;
-  cursor: pointer;
-  font-size: 13px;
-}
-
-.otp-checkout-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.otp-checkout-link {
-  background: none;
-  border: none;
-  color: var(--otp-checkout-color, #2d264b);
-  text-decoration: underline;
-  cursor: pointer;
-  font-size: 12px;
-  padding: 4px 6px;
-}
-
-.otp-checkout-link:disabled {
-  color: #999;
-  cursor: not-allowed;
-  text-decoration: none;
-}
-
-.otp-checkout-code-input {
-  padding: 10px 14px;
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  font-size: 14px;
-  max-width: 180px;
-}
-
-.otp-checkout-status {
-  font-size: 12px;
-}
-
-.otp-checkout-status--verified {
-  color: #1a7f37;
-  font-weight: 600;
-}
-
-.otp-checkout-timer {
-  font-size: 12px;
-  color: #666;
-  margin-inline-start: 4px;
-}
-
-.otp-checkout-msg {
-  font-size: 12px;
-  color: #c00;
-  margin-top: 10px;
+.otp-checkout-widget {
+  margin: 14px 0 20px;
+  max-width: 420px;
 }
 
 .otp-checkout-hidden {
   display: none !important;
 }
 
-/* Gate mode: a normal step in the page flow, not a popup/modal over the form.
-   The real checkout form is hidden entirely (display:none, set inline by PHP
-   before this ever paints) while this step is showing - no backdrop, no blur,
-   no fixed positioning. Once verified, JS removes the hiding <style> tag and
-   this block, so the form appears in its place like the next wizard step. */
+.otp-checkout-scope .otp-checkout-step {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ---------- Gate mode: a normal step in the page flow, not a popup ----------
+   The real checkout form is hidden entirely (display:none, set inline by PHP before this ever paints) while this
+   step is showing - no backdrop, no blur, no fixed positioning. Once verified, JS removes the hiding <style> tag
+   and this block, so the form appears in its place like the next wizard step. */
 .otp-checkout-gate-step {
-  /* Same fallback pattern as .otp-checkout-widget above. */
-  --otp-checkout-color: #2d264b;
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 28px;
-  max-width: 480px;
+  max-width: 420px;
   margin: 0 auto 24px;
-  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.06);
+  padding: 28px 20px;
+  background: #fff;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.12);
 }
 
-.otp-checkout-gate-step__title {
-  margin: 0 0 10px;
-  font-size: 18px;
+/* scoped + pinned like the buttons: themes style h3/p with rules such as ".woocommerce h3" or ".entry-content p",
+   which used to left/right-align these and change their size */
+.otp-checkout-scope .otp-checkout-gate-step__title {
+  margin: 0 0 8px !important;
+  padding: 0 !important;
+  text-align: center !important;
+  font-size: 22px !important;
+  font-weight: 800 !important;
+  line-height: 1.5 !important;
+  color: #374151 !important;
 }
 
-.otp-checkout-gate-step__desc {
-  margin: 0 0 22px;
+.otp-checkout-scope .otp-checkout-gate-step__desc {
+  margin: 0 0 20px !important;
+  text-align: center !important;
+  font-size: 14px !important;
+  line-height: 1.8 !important;
+  color: #4b5563 !important;
+}
+
+/* code step (the phone step is swapped out, like the login page): keep the title, drop the long sentence */
+.otp-checkout-scope.otp-checkout-gate-step--code .otp-checkout-gate-step__title {
+  margin-bottom: 20px !important;
+}
+
+.otp-checkout-scope.otp-checkout-gate-step--code .otp-checkout-gate-step__desc {
+  display: none !important;
+}
+
+/* ---------- Phone field (same as the login page fields) ---------- */
+.otp-checkout-scope .otp-checkout-field {
+  position: relative;
+}
+
+.otp-checkout-scope .otp-checkout-input {
+  width: 100%;
+  height: auto !important;
+  margin: 0;
+  /* same as the login page field: right-to-left text with the icon on the left. Themes often force phone inputs to
+     left-aligned text, which would put the typed number right under the icon. */
+  direction: rtl !important;
+  text-align: right !important;
+  padding: 12px 14px 12px 44px !important;
+  background: #f3f4f6 !important;
+  border: 2px solid transparent !important;
+  border-radius: 12px !important;
+  box-shadow: none !important;
+  outline: none !important;
+  color: #374151 !important;
+  font-family: inherit;
+  font-size: 14px !important;
+  line-height: 1.6 !important;
+}
+
+.otp-checkout-scope .otp-checkout-input::placeholder {
+  color: #797a7b;
+}
+
+.otp-checkout-scope .otp-checkout-input:focus {
+  background: #fff !important;
+  border-color: var(--otp-checkout-color) !important;
+}
+
+.otp-checkout-scope .otp-checkout-input.otp-checkout-input--error,
+input.otp-checkout-input--error {
+  border-color: #dc2626 !important;
+}
+
+.otp-checkout-scope .otp-checkout-field__icon {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 14px;
+  width: 18px;
+  height: 18px;
+  margin: auto 0;
+  pointer-events: none;
+}
+
+/* ---------- Primary button ---------- */
+.otp-checkout-scope .otp-checkout-btn {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: auto !important;
+  min-height: 0 !important;
+  margin: 8px 0 0;
+  padding: 12px 0 !important;
+  background: var(--otp-checkout-color) !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-radius: 12px !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  text-transform: none !important;
+  color: var(--otp-checkout-on-color) !important;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px !important;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.6 !important;
+  text-align: center;
+  text-decoration: none;
+  transition: filter 0.15s ease;
+}
+
+/* themes love to restyle :hover/:focus/:active - pin the chosen color there too */
+.otp-checkout-scope .otp-checkout-btn:hover:not(:disabled),
+.otp-checkout-scope .otp-checkout-btn:focus:not(:disabled),
+.otp-checkout-scope .otp-checkout-btn:active:not(:disabled) {
+  background: var(--otp-checkout-color) !important;
+  color: var(--otp-checkout-on-color) !important;
+  filter: brightness(0.92);
+}
+
+.otp-checkout-scope .otp-checkout-btn:focus-visible {
+  outline: 2px solid var(--otp-checkout-color) !important;
+  outline-offset: 2px;
+}
+
+.otp-checkout-scope .otp-checkout-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.otp-checkout-scope .otp-checkout-status {
   font-size: 13px;
-  color: #555;
-  line-height: 1.7;
+  text-align: center;
+}
+
+.otp-checkout-scope .otp-checkout-status--verified {
+  color: #1a7f37;
+  font-weight: 600;
+}
+
+/* ---------- Link-style buttons (resend, edit number) ---------- */
+.otp-checkout-scope .otp-checkout-link {
+  -webkit-appearance: none;
+  appearance: none;
+  width: auto;
+  height: auto !important;
+  min-height: 0 !important;
+  margin: 0;
+  padding: 4px 0 !important;
+  background: none !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  color: var(--otp-checkout-color) !important;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px !important;
+  font-weight: 600;
+  text-decoration: none !important;
+  text-transform: none !important;
+}
+
+.otp-checkout-scope .otp-checkout-link:hover:not(:disabled) {
+  background: none !important;
+  color: var(--otp-checkout-color) !important;
+  text-decoration: underline !important;
+}
+
+.otp-checkout-scope .otp-checkout-link:disabled {
+  color: #9ca3af !important;
+  cursor: not-allowed;
+  text-decoration: none !important;
+}
+
+/* ---------- Code step ---------- */
+.otp-checkout-scope .otp-checkout-info-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.otp-checkout-scope .otp-checkout-info {
+  flex: 1;
+  margin: 0 8px;
+  color: #4b5563;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: right;
+}
+
+/* the arrow that goes back to the phone step (same icon and role as the login page's back button) */
+.otp-checkout-scope .otp-checkout-back {
+  -webkit-appearance: none;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  height: auto !important;
+  min-height: 0 !important;
+  margin: 0;
+  padding: 4px !important;
+  background: none !important;
+  border: 0 !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.otp-checkout-scope .otp-checkout-back:hover,
+.otp-checkout-scope .otp-checkout-back:focus {
+  background: none !important;
+  opacity: 0.7;
+}
+
+.otp-checkout-scope .otp-checkout-back img {
+  display: block;
+  width: 22px;
+  height: 22px;
+  max-width: none;
+}
+
+.otp-checkout-scope .otp-checkout-boxes {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  margin: 8px 0 0;
+  direction: ltr;
+}
+
+.otp-checkout-scope .otp-checkout-box {
+  flex: 0 1 3rem;
+  min-width: 0;
+  width: 3rem;
+  height: 3rem !important;
+  margin: 0;
+  padding: 0 !important;
+  background: #fff !important;
+  border: 2px solid #e5e7eb !important;
+  border-radius: 12px !important;
+  box-shadow: none !important;
+  outline: none !important;
+  color: #374151 !important;
+  font-family: inherit;
+  font-size: 1.125rem !important;
+  font-weight: 700;
+  line-height: 1 !important;
+  text-align: center;
+  transition: all 0.2s ease;
+}
+
+.otp-checkout-scope .otp-checkout-box:focus {
+  border-color: var(--otp-checkout-color) !important;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.08) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--otp-checkout-color) 28%, transparent) !important;
+  transform: scale(1.05);
+}
+
+.otp-checkout-scope .otp-checkout-resend-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.otp-checkout-scope .otp-checkout-timer {
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.otp-checkout-scope .otp-checkout-msg {
+  margin: 10px 0 0;
+  color: #dc2626;
+  font-size: 13px;
+  text-align: center;
+  animation: otp-checkout-slide-down 0.3s ease;
+}
+
+@keyframes otp-checkout-slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* SweetAlert2 toast (same notification the login page shows) - it lives on <body>, outside .otp-checkout-scope */
+.otp-checkout-swal {
+  border-radius: 12px !important;
+}
+
+@media (max-width: 480px) {
+  .otp-checkout-gate-step {
+    padding: 24px 16px;
+  }
+
+  .otp-checkout-scope .otp-checkout-boxes {
+    gap: 6px;
+  }
+
+  .otp-checkout-scope .otp-checkout-box {
+    flex-basis: 2.6rem;
+    width: 2.6rem;
+    height: 2.8rem !important;
+  }
 }

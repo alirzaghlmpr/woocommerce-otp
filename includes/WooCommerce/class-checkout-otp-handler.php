@@ -196,10 +196,27 @@ class OTP_Verifier_Checkout_Handler
             OTP_VERIFIER_VERSION
         );
 
+        // همان اعلان‌های (toast) صفحهٔ ورود/ثبت‌نام. هندل اسکریپت عمداً با صفحهٔ ورود یکی است تا
+        // اگر هر دو در یک درخواست صف شدند، فقط یک بار بارگذاری شود.
+        wp_enqueue_style(
+            'otp-sweetalert-style',
+            OTP_VERIFIER_URL . 'templates/assets/css/sweetalert2.min.css',
+            [],
+            OTP_VERIFIER_VERSION
+        );
+
+        wp_enqueue_script(
+            'otp-login-script-sweetalert',
+            OTP_VERIFIER_URL . 'templates/assets/js/sweetalert2.min.js',
+            ['jquery'],
+            OTP_VERIFIER_VERSION,
+            true
+        );
+
         wp_enqueue_script(
             'otp-checkout-script',
             OTP_VERIFIER_URL . 'templates/assets/js/checkout-otp.js',
-            ['jquery'],
+            ['jquery', 'otp-login-script-sweetalert'],
             OTP_VERIFIER_VERSION,
             true
         );
@@ -235,6 +252,23 @@ class OTP_Verifier_Checkout_Handler
     }
 
     /**
+     * رنگ متن روی دکمه: روی رنگ‌های روشن (مثلاً زرد) متن سفید خوانا نیست، پس تیره می‌شود.
+     */
+    private function checkout_on_color()
+    {
+        $hex = ltrim($this->checkout_color(), '#');
+        $luminance = (0.299 * hexdec(substr($hex, 0, 2)) + 0.587 * hexdec(substr($hex, 2, 2)) + 0.114 * hexdec(substr($hex, 4, 2))) / 255;
+
+        return $luminance > 0.62 ? '#111827' : '#ffffff';
+    }
+
+    /** مقدار attribute مربوط به style که رنگ انتخابی مدیر را به CSS می‌رساند (برای ویجت و مرحلهٔ قفل) */
+    private function checkout_style_vars()
+    {
+        return '--otp-checkout-color: ' . $this->checkout_color() . '; --otp-checkout-on-color: ' . $this->checkout_on_color() . ';';
+    }
+
+    /**
      * حالت «داخل فرم»: ویجت مستقیماً بعد از فیلد استاندارد شماره موبایل ووکامرس
      * (billing_phone) رندر می‌شود - نه انتهای کل فرم صورتحساب. فیلد جدیدی
      * اضافه نمی‌شود، همان billing_phone استفاده می‌شود.
@@ -253,15 +287,18 @@ class OTP_Verifier_Checkout_Handler
     private function render_inline_widget_markup()
     {
 ?>
-        <div id="otp-checkout-inline" class="otp-checkout-widget" style="--otp-checkout-color: <?php echo esc_attr($this->checkout_color()); ?>;">
-            <div class="otp-checkout-widget__row">
+        <div id="otp-checkout-inline" class="otp-checkout-widget otp-checkout-scope" style="<?php echo esc_attr($this->checkout_style_vars()); ?>">
+            <div class="otp-checkout-step">
                 <button type="button" id="otp-checkout-send-btn" class="otp-checkout-btn">ارسال کد تایید شماره موبایل</button>
                 <span id="otp-checkout-status" class="otp-checkout-status"></span>
             </div>
-            <div id="otp-checkout-code-row" class="otp-checkout-widget__row otp-checkout-hidden">
-                <input type="text" inputmode="numeric" pattern="[0-9]*" id="otp-checkout-code" class="otp-checkout-code-input" placeholder="کد تایید" maxlength="6" autocomplete="one-time-code">
-                <button type="button" id="otp-checkout-verify-btn" class="otp-checkout-btn">تایید</button>
-                <button type="button" id="otp-checkout-resend-btn" class="otp-checkout-link" disabled>ارسال مجدد</button>
+            <div id="otp-checkout-code-row" class="otp-checkout-step otp-checkout-hidden">
+                <p id="otp-checkout-info" class="otp-checkout-info"></p>
+                <div id="otp-checkout-code" class="otp-checkout-boxes"></div>
+                <div class="otp-checkout-resend-row">
+                    <button type="button" id="otp-checkout-resend-btn" class="otp-checkout-link" disabled>ارسال مجدد</button>
+                </div>
+                <button type="button" id="otp-checkout-verify-btn" class="otp-checkout-btn">تایید کد</button>
             </div>
             <p id="otp-checkout-msg" class="otp-checkout-msg otp-checkout-hidden"></p>
         </div>
@@ -295,19 +332,30 @@ class OTP_Verifier_Checkout_Handler
         }
 ?>
         <style id="otp-checkout-gate-style">form.woocommerce-checkout{display:none;}</style>
-        <div id="otp-checkout-gate" class="otp-checkout-gate-step" style="--otp-checkout-color: <?php echo esc_attr($this->checkout_color()); ?>;">
+        <div id="otp-checkout-gate" class="otp-checkout-gate-step otp-checkout-scope" style="<?php echo esc_attr($this->checkout_style_vars()); ?>">
             <h3 class="otp-checkout-gate-step__title">تایید شماره موبایل</h3>
             <p class="otp-checkout-gate-step__desc">برای مشاهده و تکمیل فرم تسویه‌حساب، لطفاً ابتدا شماره موبایل خود را تایید کنید.</p>
 
-            <div id="otp-checkout-gate-phone-row" class="otp-checkout-widget__row">
-                <input type="tel" inputmode="numeric" maxlength="11" id="otp-checkout-gate-phone" class="otp-checkout-code-input" placeholder="شماره موبایل">
+            <div id="otp-checkout-gate-phone-row" class="otp-checkout-step">
+                <div class="otp-checkout-field">
+                    <input type="tel" inputmode="numeric" maxlength="11" id="otp-checkout-gate-phone" class="otp-checkout-input" placeholder="شماره موبایل">
+                    <img class="otp-checkout-field__icon" src="<?php echo esc_url(OTP_VERIFIER_URL . 'templates/assets/images/svg/phone.svg'); ?>" alt="">
+                </div>
                 <button type="button" id="otp-checkout-gate-send-btn" class="otp-checkout-btn">ارسال کد</button>
             </div>
 
-            <div id="otp-checkout-gate-code-row" class="otp-checkout-widget__row otp-checkout-hidden">
-                <input type="text" inputmode="numeric" pattern="[0-9]*" id="otp-checkout-gate-code" class="otp-checkout-code-input" placeholder="کد تایید" maxlength="6" autocomplete="one-time-code">
-                <button type="button" id="otp-checkout-gate-verify-btn" class="otp-checkout-btn">تایید</button>
-                <button type="button" id="otp-checkout-gate-resend-btn" class="otp-checkout-link" disabled>ارسال مجدد</button>
+            <div id="otp-checkout-gate-code-row" class="otp-checkout-step otp-checkout-hidden">
+                <div class="otp-checkout-info-row">
+                    <p id="otp-checkout-gate-info" class="otp-checkout-info"></p>
+                    <button type="button" id="otp-checkout-gate-back-btn" class="otp-checkout-back" aria-label="ویرایش شماره" title="ویرایش شماره">
+                        <img src="<?php echo esc_url(OTP_VERIFIER_URL . 'templates/assets/images/svg/arrow-left-auth-login-2.svg'); ?>" alt="">
+                    </button>
+                </div>
+                <div id="otp-checkout-gate-code" class="otp-checkout-boxes"></div>
+                <div class="otp-checkout-resend-row">
+                    <button type="button" id="otp-checkout-gate-resend-btn" class="otp-checkout-link" disabled>ارسال مجدد</button>
+                </div>
+                <button type="button" id="otp-checkout-gate-verify-btn" class="otp-checkout-btn">تایید کد</button>
             </div>
 
             <p id="otp-checkout-gate-msg" class="otp-checkout-msg otp-checkout-hidden"></p>

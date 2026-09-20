@@ -1,6 +1,6 @@
 ﻿# OTP Verifier
 
-![Version](https://img.shields.io/badge/Version-1.3.6-green)
+![Version](https://img.shields.io/badge/Version-1.3.9-green)
 ![WordPress](https://img.shields.io/badge/WordPress-5.8%2B-blue)
 ![WooCommerce](https://img.shields.io/badge/WooCommerce-6.0%2B-purple)
 ![PHP](https://img.shields.io/badge/PHP-7.4%2B-777bb4)
@@ -93,6 +93,19 @@ Login UI
 - Enhanced analytics and logging
 
 ## Changelog
+
+### 1.3.9
+- **Change:** the checkout phone-verification *flow* now works exactly like the login/signup page, in both the full-lock (gate) and the inline mode. Pressing *send code* disables the button and changes its label to "در حال ارسال..."; when the server answers, the same toast notification the login page uses (SweetAlert2, top corner) appears - "کد تایید برای شماره 0912***4567 ارسال شد" - and, in gate mode, the phone step is replaced by the code step: the info line with the masked number and a back arrow (instead of the old *edit number* text link), the code boxes, the resend link with its countdown, and the verify button (label "در حال بررسی..." while checking). Errors show as a toast plus a message under the form (invalid number - with a red border on the field -, incomplete code, wrong code with the remaining attempts, network timeout, rate limit). After 5 wrong codes (the same limit the server enforces) the customer is sent back to the phone step to request a new code. Resend shows its own "ارسال مجدد" toast.
+- **Change:** phone numbers typed with Persian/Arabic digits, a `+98`/`0098` prefix or without the leading zero are now accepted by the checkout widget (they used to be rejected as invalid because the non-ASCII digits were stripped).
+- **Fix:** the *resend* button was re-enabled the moment a code was sent (the loading state was restored after the countdown had started), so it looked clickable during the countdown. It now stays disabled until the countdown ends.
+
+### 1.3.8
+- **Fix:** the title and description of the checkout gate step ("تایید شماره موبایل") were only styled with a single class, so themes that style headings and paragraphs inside the checkout page (for example `.woocommerce h3`) still made them right-aligned and a different size than the login page. They are now scoped to the plugin's container and pinned, like the buttons and fields already were, so the gate step looks the same on every theme.
+- **Change:** version bump so browsers reload the checkout stylesheet and script. Sites that still showed the old gray buttons / single code field after updating were being served the cached files from before 1.3.7 (the files are cache-busted by the plugin version).
+
+### 1.3.7
+- **Change:** the checkout phone-verification UI (both the gate step and the inline widget) now matches the login/signup page: a rounded card, a gray rounded phone field with the phone icon, a full-width rounded primary button, and the code entered in separate boxes (typing, paste, browser autofill, keyboard SMS suggestion and WebOTP all work). In gate mode the phone step is replaced by the code step, with a masked "code sent to 0912***4567" line, an *edit number* link, and resend with a countdown - like the login page.
+- **Fix:** the button color chosen in settings was ignored on themes that style every `<button>` (the buttons showed the theme's gray). The plugin's checkout styles are now scoped to its own containers and pinned, including hover/focus, so the chosen color always applies; the text on the buttons turns dark automatically when the chosen color is very light.
 
 ### 1.3.6
 - **Feature:** new admin page *OTP Verifier -> Migrate users* to bring users over from any other OTP/login plugin by the user meta key(s) it stored the phone number in. Three steps: (1) find the keys - an automatic scan lists the meta keys whose values look like Iranian mobile numbers, or you enter a phone number you already know and the tool tells you which keys store it, and you add them to a list; (2) enter one or more keys (comma separated, the order is the priority) and get a read-only preview: how many users, which number formats were detected (`09...`, `9...`, `+98...`, `0098...`, Persian digits, spaces/dashes - all converted to `09xxxxxxxxx`), and how many are ready / already migrated / already have another number / owned by someone else / duplicated between users / invalid, with samples of each; (3) tick the backup confirmation and start - the migration runs in small AJAX batches with a progress bar.
