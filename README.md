@@ -1,95 +1,346 @@
 ﻿# OTP Verifier
 
+**Passwordless phone login, signup and WooCommerce checkout phone verification for WordPress — with one-time codes (OTP) sent by SMS.**
+
 ![Version](https://img.shields.io/badge/Version-1.3.9-green)
 ![WordPress](https://img.shields.io/badge/WordPress-5.8%2B-blue)
 ![WooCommerce](https://img.shields.io/badge/WooCommerce-6.0%2B-purple)
 ![PHP](https://img.shields.io/badge/PHP-7.4%2B-777bb4)
+![License](https://img.shields.io/badge/License-GPL--2.0--or--later-lightgrey)
 
-A lightweight, optimized WordPress plugin for OTP-based login and signup.
+OTP Verifier replaces the WooCommerce **My Account** login page with a clean, branded, phone-first login/signup screen, lets customers **prove their phone number at checkout**, and talks to the four most popular Iranian SMS providers. It is small, dependency-free (jQuery + SweetAlert2 only), and built with security in mind: hashed codes, constant-time comparison, fail-closed rate limiting and server-side enforcement.
+
+> The interface is Persian (RTL) and the plugin targets **Iranian mobile numbers** (`09xxxxxxxxx`). Every visitor-facing title, button label and legal text on the login page is editable from the settings.
+
+## Table of contents
+
+- [Highlights](#highlights)
+- [Features](#features)
+  - [OTP login & signup](#1-otp-login--signup)
+  - [Login page customization](#2-login-page-customization)
+  - [WooCommerce checkout phone verification](#3-woocommerce-checkout-phone-verification)
+  - [Smart code entry & SMS autofill](#4-smart-code-entry--sms-autofill)
+  - [SMS gateways & test tool](#5-sms-gateways--test-tool)
+  - [User migration](#6-user-migration)
+  - [Admin conveniences](#7-admin-conveniences)
+- [Security](#security)
+- [Limits at a glance](#limits-at-a-glance)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Configuration guide](#configuration-guide)
+- [Settings reference](#settings-reference)
+- [Troubleshooting & FAQ](#troubleshooting--faq)
+- [Technical reference](#technical-reference)
+- [Screenshots](#screenshots)
+- [Roadmap](#roadmap)
+- [Changelog](#changelog)
+- [License](#license)
 
 ## Highlights
-- Very light and performance-focused for fast login/signup flows
-- OTP login and registration with a clean UX
-- Supports 4 popular SMS gateways: FarazSMS, MelliPayamak, SMS.ir, and Kavehnegar
-- One‑click migration from Digits (migrate numbers and accounts)
-- Built for WooCommerce account flow overrides
+
+| | |
+|---|---|
+| **Phone-first login & signup** | Enter a number, enter the code, you are in. New numbers get an account automatically; existing numbers are logged in. |
+| **Two login modes** | Classic (username/password, signup form *and* phone login) or *phone number only* (a single field, nothing else). |
+| **Checkout phone verification** | Make customers verify their phone with an OTP before an order can be placed — inline next to the phone field, or as a full-lock step before the form. |
+| **Same experience everywhere** | The login page and the checkout share one flow: button loading states, toast notifications, separate code boxes, resend countdown, attempt limit. |
+| **SMS autofill** | Codes are read from the incoming SMS (WebOTP on Chrome/Android) or suggested by the keyboard (iOS/Android) and verified automatically. |
+| **4 SMS gateways** | FarazSMS, MeliPayamak, SMS.ir and Kavenegar, with a built-in test-SMS tool. |
+| **Migration tools** | One-click migration from **Digits**, plus a universal migrator for any other OTP/login plugin (preview, batches, undo). |
+| **Hardened by default** | Codes stored as HMAC-SHA256 hashes, `hash_equals()`, per-phone and per-IP rate limits, 5-attempt lockout, nonces everywhere, no secrets in logs. |
+| **Fully brandable** | Logo, size, background image, colour overlay, titles, button texts, privacy text, custom CSS, checkout accent colour. |
 
 ## Features
-- OTP login and signup (phone-based)
-- Customizable login page (logo, titles, button text, background)
-- Optional color overlay on the login background image (color + opacity), for readability
-- **WooCommerce checkout phone verification** — verify the customer's phone with an OTP before an order can be placed, in one of two admin-selectable modes:
-  - **Inline**: a verify button next to WooCommerce's own billing‑phone field (no extra field); Place Order stays disabled until verified
-  - **Gate**: a full overlay blocks the checkout form entirely until the phone is verified
-  - Enforced server-side (`woocommerce_checkout_process`), not just in JS — classic (shortcode) checkout only, not WooCommerce Blocks checkout
-  - Logged-in customers are exempt by default (already-authenticated accounts skip the widget/gate entirely); an "require for logged-in users too" setting extends the same requirement to them
-- **WebOTP autofill** — on supported browsers (Chrome/Android), the OTP code is read directly from the incoming SMS and filled in automatically (no copy/paste), on the login/signup page and both checkout verification modes. Requires the SMS gateway's pattern/template to end with `@yourdomain.com #code` (configured on the SMS provider's panel, not in this plugin)
-- SweetAlert2 feedback messages
-- User‑friendly OTP input flow
-- AJAX-powered verification
-- Replaces WooCommerce **/my-account** login/signup with the OTP UI
 
-## Technical Features
-- Phone-based rate limiting (3 OTP requests per 5 minutes)
-- IP-based rate limiting (10 requests per 5 minutes) — applied to OTP **and** password login endpoints
-- Brute‑force protection with max OTP verify attempts (5 tries)
-- OTP length capped between 4 and 6 digits
-- Automatic cleanup via WP‑Cron — two dedicated jobs: OTP table cleanup (every 10 min) and rate-limit transient cleanup (hourly)
-- Custom database table for OTP codes
-- Database-version migration on update (auto‑alters schema without requiring reactivation)
-- OOP, class‑based architecture (Repository pattern for storage, Strategy + Factory for SMS gateways)
+### 1. OTP login & signup
+
+The plugin takes over the WooCommerce **My Account** page for **logged-out visitors** and shows its own standalone login page (its own HTML document, with the bundled *YekanBakh* font, RTL). Logged-in customers still see the normal WooCommerce account area.
+
+**Two modes, chosen in the settings**
+
+| Mode | What the visitor sees |
+|---|---|
+| **Classic** (default) | Username/email + password login, a *sign up* form (username, password, phone) and a *log in with phone number* option. Signup and phone login always confirm the number with an OTP (phone login requires an existing account). |
+| **Phone number only** | One phone field and one button. Enter the number, enter the code — an existing account is logged in, otherwise a new one is created (its username is the phone number). The username/password form, the signup form and every link to them are not rendered at all. |
+
+**The OTP flow**
+
+1. The visitor enters a phone number (Persian digits and the `+98` / `98` prefixes are understood and converted to `09xxxxxxxxx`).
+2. The send button switches to a loading state ("در حال ارسال...") and a code is sent by SMS.
+3. A toast confirms it — *"کد تایید برای شماره 0912\*\*\*4567 ارسال شد"* — and the form is replaced by the code step: masked number, a back arrow, the code boxes, a resend link with a countdown, and the verify button.
+4. Wrong codes show a toast plus an inline message with the remaining attempts; after **5** wrong codes the visitor is sent back to request a new code.
+5. On success the visitor is logged in and redirected to the WooCommerce My Account page (or the home page if WooCommerce is unavailable).
+
+**Account handling**
+
+- **New accounts** are created with the `customer` role and the number stored in the `phone_number` user meta. A random password is generated unless the signup form supplied one.
+- **Placeholder email** for OTP-only signups is built from your own domain (`09123456789@yoursite.com`), never the reserved `example.com`. If the visitor typed an email as the username, that email is used.
+- **Duplicate protection** — a username already tied to a different number, or a number already tied to a different username, is rejected with a clear message.
+- **Existing Digits users** are recognised through `digits_phone_no`; on their first OTP login their number is copied to `phone_number` automatically.
+- **Password login** is still available in classic mode (username or email + password) and is protected by the IP rate limit.
+- **Deep link prefill** — open the login page with `?phone=09123456789` to have the number filled in.
+- A fresh OTP **invalidates** any previous code for that number.
+
+### 2. Login page customization
+
+Everything below is editable from the **Login Page** section of the OTP Verifier settings — no template editing needed.
+
+- **Texts:** page title, main button text, signup section title, signup button text, and the terms/privacy text under the button (simple HTML such as `<span>` is allowed).
+- **Logo:** URL and width × height (the bundled default logo is used when empty).
+- **Background:** image URL (the bundled background is used when empty) and an optional **colour overlay** (colour + 0–100 % opacity) for readable content on busy photos.
+- **Custom CSS:** a free-form field appended to the login page.
+- Responsive layout with a 420 px card, rounded fields, password show/hide toggles and SweetAlert2 toast notifications.
+- An **on/off switch** for the whole login-page replacement.
+
+### 3. WooCommerce checkout phone verification
+
+Require customers to verify their phone number with an OTP before they can place an order. Enable it in the **Checkout** section of the OTP Verifier settings and pick a mode:
+
+| | **Inline** (default) | **Gate** (full lock) |
+|---|---|---|
+| Where | Right below WooCommerce's own *billing phone* field — no extra field is added. | A step **before** the checkout form; the form is completely hidden (inline CSS, so it never flashes) until the phone is verified. |
+| Flow | *Send code* button → code boxes → verify. The **Place order** button stays disabled until the number is verified. | Phone step → code step (the phone step is replaced, like the login page) → the checkout form appears with the verified number filled in and locked. |
+| Number source | The billing phone the customer typed. | An input in the gate, pre-filled from the customer's saved billing phone or account phone. |
+
+**What both modes share**
+
+- The *same* experience as the login page: loading labels, toast notifications, separate code boxes with paste/autofill/WebOTP support, resend countdown, masked number, 5-attempt limit and inline error messages.
+- **Server-side enforcement** on `woocommerce_checkout_process`: an order is only accepted when the number in the form equals the number verified in the WooCommerce session. The UI is a convenience — the server is the gate. Changing the phone after verifying invalidates the verification.
+- **Logged-in customers are exempt by default** (their account is already authenticated). Turn on *Require verification for logged-in users* to apply the same rule to everyone.
+- **Accent colour picker** for the checkout buttons and links. The button text automatically switches to dark on very light colours, and the styles are scoped and pinned so themes cannot override your colour.
+- **Robust against themes:** if a theme or plugin removed the `billing_phone` field, the plugin puts it back (and marks it required) whenever verification is on.
+- Uses the same OTP engine, gateway, rate limits and attempt limit as the login page.
+- Forgiving number input: Persian/Arabic digits, `+98` / `0098` / `98` prefixes and a missing leading zero are all converted to `09xxxxxxxxx`.
+
+> **Classic checkout only.** The `[woocommerce_checkout]` shortcode checkout is supported. The block-based *Cart & Checkout* is not — the feature stays inactive there (a warning is written to the debug log).
+
+### 4. Smart code entry & SMS autofill
+
+The code is entered in individual boxes (one per digit, LTR), and *every* way of getting a code into them works:
+
+- **Typing** — auto-advance, backspace-to-previous, arrow keys, a typed digit overwrites the box.
+- **Paste** — a full code pasted into any box is distributed across all boxes.
+- **Browser / keyboard autofill** — the first box is `autocomplete="one-time-code"`, so the iOS/Android keyboard SMS suggestion and password-manager autofill work; boxes accept a whole code at once.
+- **WebOTP autofill** (Chrome on Android) — the code is read straight from the incoming SMS with no tapping. The client starts listening *before* the send request so an SMS that beats the server response is not missed.
+- **Auto-verify** — as soon as the last digit lands, the code is submitted. Persian/Arabic-Indic digits are converted to ASCII and other characters dropped.
+- The code length follows the setting, clamped to 4–6 digits on both server and client.
+
+> WebOTP requires the **last line of your SMS pattern** to be `@yourdomain.com #code`, where the host is *exactly* the host the site is opened on. This is configured in your SMS provider's panel, not in the plugin. See [Troubleshooting](#troubleshooting--faq).
+
+### 5. SMS gateways & test tool
+
+| Gateway | Admin label | Required settings |
+|---|---|---|
+| **FarazSMS** | فراز اس‌ام‌اس | username, password, API key, pattern code, pattern variable name, sender line |
+| **MeliPayamak** | ملی پیامک | username, password (or an API key in its place), pattern (body ID) |
+| **SMS.ir** | SMS.ir | API key, pattern code, pattern variable name |
+| **Kavenegar** | کاوه‌نگار | API key, pattern code, pattern variable name |
+
+All gateways send the code through the provider's **pattern/template** (verify-lookup) API with a 15-second timeout. A **Test SMS** tool on the settings page sends the sample code `1234` to any number, so you can validate credentials and the pattern before going live.
+
+### 6. User migration
+
+**One-click Digits migration** (settings page): finds every user with a `digits_phone_no` and stores a standard `09xxxxxxxxx` number in `phone_number`. Only needed once — Digits users are also migrated automatically on their first OTP login.
+
+**Universal migrator** (**OTP Verifier → Migrate users**) for *any* other OTP/login plugin:
+
+1. **Find the meta keys** — an automatic scan lists the user-meta keys whose values look like Iranian mobile numbers, or enter a number you already know and the tool tells you which keys hold it. Click *add to list*.
+2. **Preview (no changes)** — enter up to 10 keys (comma-separated, order = priority). You get counts of users *ready / already migrated / already having another number / owned by someone else / duplicated / invalid*, the number formats found (`09…`, `9…`, `+98…`, `0098…`, Persian digits, spaces/dashes), per-key statistics, samples of each case, and how many users have *different* numbers in different keys.
+3. **Confirm & run** — tick the backup confirmation and start. The migration runs in small AJAX batches (200 users at a time) with a progress bar.
+4. **Undo** — every record the tool writes is marked, so the whole migration for those keys can be rolled back.
+
+**Safety guarantees:** only `phone_number` is added; the original meta is never modified; an existing `phone_number` is never overwritten; a number already owned by another user (in any format) is skipped; a number shared by several source users goes to one user only, so the same person can never end up with two accounts and phone login is never ambiguous. The first *valid* number in key-priority order wins, so garbage in the first key falls through to the next. Access requires `manage_options` and a nonce.
+
+### 7. Admin conveniences
+
+- A top-level **OTP Verifier** menu with everything on one settings page, plus the *Migrate users* sub-page.
+- A **phone number column** in **Users → All Users**, sortable, that also shows Digits-only numbers (tagged *Digits*).
+- Automatic **database upgrades** on update — no reactivation needed.
+- **Clean uninstall** — settings, the OTP table, scheduled jobs and rate-limit transients are removed (user phone numbers are kept so accounts keep working if you reinstall).
 
 ## Security
-- **OTP codes are never stored in plaintext** — they are hashed with HMAC-SHA256 (keyed with `wp_salt`) before being written to the database
-- **Constant-time verification** with `hash_equals()` to eliminate timing side-channels
-- **Fail-closed rate limiting** — if the counter cannot be persisted, the request is denied rather than allowed, so the limit cannot be bypassed
-- **Gated logging** — diagnostic logs are written only when `WP_DEBUG` is enabled, never in production
-- **No sensitive data in logs** — OTP codes are never logged, and phone numbers are masked (e.g. `0912****89`)
-- Nonce verification on all AJAX endpoints and strict input sanitization
-- OTP-only signups use a placeholder email built from the site's own domain (no reserved `example.com`)
 
-## Supported SMS Gateways
-- FarazSMS
-- MelliPayamak
-- SMS.ir
-- Kavehnegar
+- **Codes are never stored in plaintext** — HMAC-SHA256 keyed with your WordPress salt; codes are generated with `wp_rand()`.
+- **Constant-time verification** with `hash_equals()` to remove timing side-channels.
+- **Brute-force lockout** — at most **5** verification attempts per code; after that the code is destroyed and a new one must be requested.
+- **Rate limiting** per phone number (3 codes / 5 min) and per IP (10 requests / 5 min) — the IP limit also protects the **password login** endpoint. The limiter is **fail-closed**: if the counter cannot be saved, the request is denied.
+- **Short-lived codes** (configurable expiry), expired codes are removed by scheduled cleanup, and a new code invalidates the previous one.
+- **Nonce verification** on every AJAX endpoint and strict input sanitisation/validation; admin tools also check `manage_options`.
+- **Server-side checkout enforcement** — the order is rejected unless the submitted phone equals the verified phone stored in the WooCommerce session.
+- **Privacy-aware logging** — logs are written **only when `WP_DEBUG` is on**; OTP codes are never logged and phone numbers are masked (`0912****89`), and credentials are masked when a gateway request URL is logged.
+- **Safe placeholder emails** built from the site's own domain.
 
-## One‑Click Migration
-Migrate users and phone numbers from the Digits plugin with a single click, or from any other OTP/login plugin through *OTP Verifier -> Migrate users*: pick the user meta key that holds the phone numbers (a scan and a search by a known number help you find it), review a read-only preview, then confirm. The migration is additive, batched and can be undone.
+## Limits at a glance
+
+| Item | Value |
+|---|---|
+| Code length | 4–6 digits (setting; default 4 on a fresh install) |
+| Code validity | Configurable in seconds (default 60 on a fresh install; 120 if unset) |
+| Resend countdown | Same as the code validity |
+| Verification attempts per code | 5 |
+| Codes per phone number | 3 per 5 minutes |
+| OTP-send and password-login requests per IP | 10 per 5 minutes |
+| SMS gateway timeout | 15 seconds |
+| Expired-code cleanup | every 10 minutes (WP-Cron) |
+| Rate-limit transient cleanup | hourly (WP-Cron) |
+| Migration batch size | 200 users per request, up to 10 meta keys |
 
 ## Requirements
-- WordPress (recommended: latest stable)
-- WooCommerce (for My Account override)
-- PHP (recommended: 7.4+)
+
+- WordPress 5.8+
+- WooCommerce 6.0+ (the login replacement and checkout verification are WooCommerce features)
+- PHP 7.4+
+- An account with one of the supported SMS gateways and an approved **pattern/template** for the OTP message
+- Iranian mobile numbers (`09xxxxxxxxx`)
 
 ## Installation
+
 1. Download or clone this repository.
 2. Upload the plugin folder to `wp-content/plugins/`.
-3. Activate **OTP Verifier** from the WordPress admin.
+3. Activate **OTP Verifier** in the WordPress admin. The OTP table and the default settings are created on activation.
 
-## Configuration
-1. Go to **OTP Verifier** settings in the WordPress admin.
-2. Enter your SMS gateway credentials.
-3. Customize login page text, logo, and background if desired.
-4. Save settings.
+## Configuration guide
 
-## Usage
-- Visit the WooCommerce My Account page to see the OTP login/signup UI.
-- Users can register or log in using their phone number.
+1. Open **OTP Verifier** in the admin menu.
+2. **SMS gateway** — choose your provider and fill in the fields it needs (see the [table](#5-sms-gateways--test-tool)). Create the pattern in the provider's panel with one variable for the code, for example:
+   `کد تایید شما: %code%` — then enter the pattern code and the variable name (`code`) in the plugin.
+3. **OTP settings** — set the code validity (seconds) and the code length (4–6).
+4. Click **Send test SMS** to confirm the gateway works (it sends `1234`).
+5. **Login page** — enable *Replace login page*, optionally enable *phone number only*, then customise texts, logo, background, overlay and CSS.
+6. **Checkout** (optional) — enable *Checkout phone verification*, choose *Inline* or *Gate*, decide whether logged-in users must verify too, and pick the button colour.
+7. **Autofill** (optional, recommended) — end your SMS pattern's last line with `@yourdomain.com #code`, using the exact host visitors open.
+8. **Migrating from another plugin?** Use the Digits button on the settings page or **OTP Verifier → Migrate users**.
+9. Visit **My Account** while logged out to see the result.
+
+## Settings reference
+
+Settings are stored in the `otp_verifier_settings` option.
+
+| Setting (admin label, Persian) | Key | Default | What it does |
+|---|---|---|---|
+| Replace login page (فعال‌سازی جایگزینی صفحه ورود) | `active_login` | on | Turns the My Account login replacement on/off. |
+| SMS gateway (انتخاب درگاه پیامکی) | `gateway` | `melipayamak` | `melipayamak`, `farazsms`, `kavenegar` or `smsir`. |
+| Username / Password / API key (نام کاربری، رمز عبور، کلید API) | `username`, `password`, `api_key` | empty | Gateway credentials (which ones you need depends on the gateway). |
+| Pattern / Variable name / Sender line (پترن، اسم متغییر پترن، خط ارسال کننده) | `pattern`, `otp_var_name`, `line_number` | empty | SMS template code, the template variable that receives the OTP, and the sender line (FarazSMS). |
+| OTP validity, seconds (مدت اعتبار OTP) | `otp_expire` | 60 (fresh install) | How long a code is valid; also the resend countdown. |
+| OTP length (طول عدد) | `otp_length` | 4 (fresh install) | Digits in the code, clamped to 4–6. |
+| Phone number only (ورود/ثبت‌نام فقط با شماره موبایل) | `phone_only_auth_enabled` | off | Single-field login/signup. |
+| Login title (عنوان صفحه ورود) | `login_title` | `ورود \| ثبت نام` | Main heading. |
+| Login button text (متن دکمه ورود) | `login_button_text` | `ورود یا ثبت نام` | Main button label. |
+| Signup title / button (عنوان بخش ثبت نام / متن دکمه ثبت نام) | `signup_title`, `signup_button_text` | `ایجاد حساب جدید` / `ثبت نام` | Signup section texts. |
+| Terms & privacy text (متن قوانین و حریم خصوصی) | `login_privacy_text` | Persian sample text | Text under the button; simple HTML allowed. |
+| Logo URL / size (آدرس لوگو / ابعاد) | `login_logo_url`, `login_logo_width`, `login_logo_height` | bundled logo, `200px` × `55px` | Login page logo. |
+| Background image URL (آدرس تصویر پس‌زمینه) | `login_bg_image_url` | bundled image | Login page background. |
+| Overlay colour / opacity (پوشش روی تصویر پس‌زمینه) | `login_bg_overlay_color`, `login_bg_overlay_opacity` | `#000000` / `0` | Colour layer over the background, 0–100 %. |
+| Custom CSS (CSS اختصاصی صفحه ورود) | `login_custom_css` | empty | Extra CSS for the login page. |
+| Checkout verification (فعال‌سازی تایید شماره موبایل در تسویه‌حساب) | `checkout_verify_enabled` | off | Master switch for checkout verification. |
+| Verification mode (حالت تایید) | `checkout_verify_mode` | `inline` | `inline` or `gate`. |
+| Require for logged-in users (الزام تایید برای کاربران وارد شده) | `checkout_verify_require_logged_in` | off | Also require verification from logged-in customers. |
+| Buttons & links colour (رنگ دکمه‌ها و لینک‌ها) | `checkout_verify_color` | `#2d264b` | Accent colour of the checkout widget. |
+
+> The *Lock demo account* checkbox (`lock_demo_account`) is stored but is currently reserved: no behaviour depends on it yet.
+
+## Troubleshooting & FAQ
+
+**The login page is not shown.** Make sure *Replace login page* is on. It appears only for **logged-out** visitors on the WooCommerce **My Account** page.
+
+**No SMS arrives.** Use the *Test SMS* tool first. Then turn on `WP_DEBUG` and `WP_DEBUG_LOG` and read `wp-content/debug.log` — gateway responses are logged (codes are not, and numbers are masked). Double-check the pattern code and that the variable name matches the template.
+
+**Chrome asks for permission to read the SMS, but nothing fills in.** The SMS's last line must be `@<host> #<code>` and `<host>` must be *exactly* the host the site is opened on. Testing on `localhost` or a staging domain while the pattern names the live domain silently breaks autofill. Also: WebOTP works only on Chrome for Android; iOS uses the keyboard's one-time-code suggestion. Filter the browser console for `[OTP Verifier]` to see what happened.
+
+**The checkout widget/gate does not appear.** Check that checkout verification is enabled; that you are logged out (or *Require for logged-in users* is on); and that the checkout is the classic shortcode checkout, not the block-based one.
+
+**Checkout buttons ignore my colour / look unstyled after an update.** Browsers cache the CSS/JS; the plugin appends its version to asset URLs, so hard-refresh and clear any page/CDN cache. (Every release that touches front-end files bumps the version for this reason.)
+
+**Everyone gets “too many requests”.** The IP limit uses `REMOTE_ADDR`. Behind a proxy/CDN all visitors can appear as one IP — configure your server to restore the real client IP (for example Cloudflare's real-IP module).
+
+**No toast notifications.** SweetAlert2 was probably dequeued by another plugin or the theme. The inline message under the form still appears.
+
+**Old users cannot log in with their number.** Run the Digits migration or **OTP Verifier → Migrate users** so their number is stored as `09xxxxxxxxx` in `phone_number`.
+
+## Technical reference
+
+### Architecture
+
+Object-oriented and class-based: a **Repository** for OTP storage, a **Strategy + Factory** for SMS gateways (`otp_verifier_get_sms_gateway()`), separate services for rate limiting and script loading, and dedicated admin classes for settings sanitising, SMS testing and migrations.
+
+```
+otp-verifier.php                     bootstrap, constants, activation hooks
+uninstall.php                        removes settings, table, cron, transients
+includes/
+  class-otp-verifier.php             core hooks, Users-list phone column
+  class-settings-page.php            admin menu + settings page
+  class-template-loader.php          swaps in the login template on My Account
+  class-ajax-handler.php             login endpoints (send / verify / password)
+  class-otp-handler.php              code generation, hashing, verification, cron
+  class-otp-sms-gateway.php          abstract gateway
+  class-otp-verifier-activator.php   table creation + DB upgrades
+  class-otp-verifier-deactivator.php clears scheduled jobs
+  otp-verifier-helpers.php           logging, phone masking, code hashing, gateway factory
+  Admin/                             settings sanitizer, SMS tester, Digits + meta migrators, migration page
+  Helpers/class-phone-utils.php      Iranian phone normalisation
+  Services/                          OTP repository, rate limiter, script enqueuer
+  WooCommerce/                       checkout verification handler
+  sms-gateways/                      FarazSMS, MeliPayamak, SMS.ir, Kavenegar
+templates/
+  login/index.php                    the standalone login page
+  assets/                            css, js (auth-login, checkout-otp, SweetAlert2), fonts, images
+```
+
+### AJAX endpoints
+
+| Action | Nonce | Purpose |
+|---|---|---|
+| `send_otp`, `verify_otp`, `otp_password_login` | `otp_login_nonce` | Login page: send a code, verify it (and log in / sign up), password login. Public. |
+| `otp_checkout_send`, `otp_checkout_verify` | `otp_checkout_nonce` | Checkout: send a code, verify it (stores the phone in the WooCommerce session). Public. |
+| `otp_verifier_mig_scan`, `_find`, `_preview`, `_run`, `_undo` | `otp_verifier_migration` | Migration page. Requires `manage_options`. |
+
+### Data
+
+- **Table** `{prefix}otp_verifier_codes` — `id`, `phone_number`, `code` (hash), `created_at`, `verified`, `attempt_count`.
+- **Options** — `otp_verifier_settings`, `otp_verifier_db_version`.
+- **User meta** — `phone_number` (standard `09xxxxxxxxx`), `_otp_verifier_migrated_from` (undo marker).
+- **Transients** — `otp_rate_limit_*` (per phone), `otp_ip_limit_*` (per IP).
+- **WooCommerce session** — `otp_verifier_checkout_verified_phone`.
+- **WP-Cron** — `otp_verifier_otp_cleanup` (custom `every_10_minutes` schedule) and `otp_verifier_transient_cleanup` (hourly).
+
+### Adding an SMS gateway
+
+1. Create `includes/sms-gateways/class-sms-gateway-<slug>.php` containing a class `SMS_Gateway_<Slug>` that extends `OTP_SMS_Gateway` and implements `send_sms(string $to, array $variables, string $pattern): object`, returning an object with a boolean `success` property.
+2. Add an `<option value="<slug>">` to the gateway select in `includes/class-settings-page.php`. The factory finds and loads the class by name.
+
+### Debugging
+
+Set `WP_DEBUG` (and `WP_DEBUG_LOG`) to see detailed, privacy-safe logs of every step — sending, verifying, rate limiting, cleanup and migrations. Nothing is logged in production.
 
 ## Screenshots
-Admin Panel
+
+**Admin panel**
+
+*Gateway credentials and OTP validity*
 ![Settings 1](screenshots/setting-1.png)
+
+*OTP length and login page texts*
 ![Settings 2](screenshots/setting-2.png)
+
+*Privacy text, logo, background and custom CSS*
 ![Settings 3](screenshots/setting-3.png)
+
+*Test SMS tool and Digits migration*
 ![Settings 4](screenshots/setting-4.png)
 
-Login UI
+**Login UI**
+
+*Classic login (username and password)*
 ![Login UI 1](screenshots/ui-1.png)
+
+*OTP step with toast notification, code boxes, resend countdown*
 ![Login UI 2](screenshots/ui-2.png)
 
 ## Roadmap
-- Additional gateways
+
+- Additional SMS gateways
+- Support for the block-based (Cart & Checkout Blocks) checkout
 - Enhanced analytics and logging
 
 ## Changelog
