@@ -188,7 +188,7 @@
         .done(function (res) {
           restore();
           if (res && res.success) {
-            onSuccess();
+            onSuccess(res.data);
           } else {
             onError((res && res.data && res.data.message) || MSG.otp_invalid || "کد اشتباه است.", false);
           }
@@ -414,7 +414,7 @@
      * «در حال بررسی...»، اعلان + پیام زیر فرم برای خطا، و حداکثر ۵ تلاش.
      * هر حالت فقط می‌گوید بعد از ارسال چه چیزی نمایش داده شود (afterSent)، بعد از تایید چه شود
      * (onVerified) و وقتی تلاش‌ها تمام شد چه شود (onExhausted).
-     * o: { $info, $boxes, $resendBtn, $verifyBtn, $msg, onVerified(phone), onExhausted() }
+     * o: { $info, $boxes, $resendBtn, $verifyBtn, $msg, onVerified(phone, loggedIn), onExhausted() }
      */
     function createCodeStep(o) {
       const $timer = $('<span class="otp-checkout-timer"></span>').insertAfter(o.$resendBtn);
@@ -498,13 +498,13 @@
           phone,
           code,
           o.$verifyBtn,
-          function () {
+          function (data) {
             const verified = phone;
             webOtp.stop();
             stopCooldown(o.$resendBtn, $timer);
             hideMsg();
             showSwal("success", "تایید شد", MSG.otp_verified || "شماره موبایل با موفقیت تایید شد.", 2000);
-            o.onVerified(verified);
+            o.onVerified(verified, !!(data && data.logged_in));
           },
           function (message, isNetworkError) {
             if (isNetworkError) {
@@ -679,8 +679,20 @@
         $resendBtn: $("#otp-checkout-gate-resend-btn"),
         $verifyBtn: $("#otp-checkout-gate-verify-btn"),
         $msg: $("#otp-checkout-gate-msg"),
-        onVerified: function (phone) {
+        onVerified: function (phone, loggedIn) {
           verifiedPhone = phone;
+
+          // «ورود خودکار» فعال بود و سرور مشتری را وارد حساب کرد (یا برایش ساخت):
+          // صفحه یک‌بار رفرش می‌شود تا ووکامرس چک‌اوت را به‌صورت کاربر واردشده رندر
+          // کند (آدرس ذخیره‌شده، بدون گزینه «ساخت حساب» و ...) - خود این مرحله
+          // دوباره رندر نخواهد شد چون کاربران واردشده از تایید معاف‌اند (مگر اینکه
+          // «الزام تایید برای کاربران وارد شده» هم فعال باشد، که در آن صورت دوباره
+          // نمایش داده می‌شود، این‌بار برای یک کاربر واردشده).
+          if (loggedIn) {
+            window.location.reload();
+            return;
+          }
+
           $("#otp-checkout-gate-style").remove();
           $gate.remove();
 

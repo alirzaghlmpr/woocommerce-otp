@@ -2,7 +2,7 @@
 
 **Passwordless phone login, signup and WooCommerce checkout phone verification for WordPress — with one-time codes (OTP) sent by SMS.**
 
-![Version](https://img.shields.io/badge/Version-1.3.9-green)
+![Version](https://img.shields.io/badge/Version-1.3.11-green)
 ![WordPress](https://img.shields.io/badge/WordPress-5.8%2B-blue)
 ![WooCommerce](https://img.shields.io/badge/WooCommerce-6.0%2B-purple)
 ![PHP](https://img.shields.io/badge/PHP-7.4%2B-777bb4)
@@ -19,6 +19,7 @@ OTP Verifier replaces the WooCommerce **My Account** login page with a clean, br
   - [OTP login & signup](#1-otp-login--signup)
   - [Login page customization](#2-login-page-customization)
   - [WooCommerce checkout phone verification](#3-woocommerce-checkout-phone-verification)
+    - [Account linking & auto login](#account-linking--auto-login)
   - [Smart code entry & SMS autofill](#4-smart-code-entry--sms-autofill)
   - [SMS gateways & test tool](#5-sms-gateways--test-tool)
   - [User migration](#6-user-migration)
@@ -43,6 +44,7 @@ OTP Verifier replaces the WooCommerce **My Account** login page with a clean, br
 | **Phone-first login & signup** | Enter a number, enter the code, you are in. New numbers get an account automatically; existing numbers are logged in. |
 | **Two login modes** | Classic (username/password, signup form *and* phone login) or *phone number only* (a single field, nothing else). |
 | **Checkout phone verification** | Make customers verify their phone with an OTP before an order can be placed — inline next to the phone field, or as a full-lock step before the form. |
+| **Orders linked to accounts** | Optionally attach every guest checkout to the account tied to the verified phone (found or created automatically), and log gate-mode customers straight in. |
 | **Same experience everywhere** | The login page and the checkout share one flow: button loading states, toast notifications, separate code boxes, resend countdown, attempt limit. |
 | **SMS autofill** | Codes are read from the incoming SMS (WebOTP on Chrome/Android) or suggested by the keyboard (iOS/Android) and verified automatically. |
 | **4 SMS gateways** | FarazSMS, MeliPayamak, SMS.ir and Kavenegar, with a built-in test-SMS tool. |
@@ -112,6 +114,21 @@ Require customers to verify their phone number with an OTP before they can place
 - Uses the same OTP engine, gateway, rate limits and attempt limit as the login page.
 - Forgiving number input: Persian/Arabic digits, `+98` / `0098` / `98` prefixes and a missing leading zero are all converted to `09xxxxxxxxx`.
 
+#### Account linking & auto login
+
+Off by default. Enable **Auto login / link order to account** (*ورود خودکار / اتصال سفارش به حساب کاربری*, `checkout_verify_auto_login`) and every **guest** customer who verifies their phone at checkout ends up attached to an account for that number — the same account logic as the login page's phone-only flow:
+
+1. An existing user with that `phone_number` is used; failing that, a legacy Digits user (`digits_phone_no`) is matched and migrated.
+2. Otherwise a new `customer` account is created: username = the phone number (a short random suffix is added in the rare case that username is taken), a random password that is never shown (the customer signs in with an OTP), and a placeholder email built from your own domain (`09123456789@yoursite.com`, `www.` stripped).
+
+| | **Gate** | **Inline** |
+|---|---|---|
+| When it runs | Right after the code is verified. | When WooCommerce creates the order. |
+| Customer experience | Logged in immediately; the checkout page reloads once so WooCommerce renders it for a logged-in customer (saved address, no *create an account* prompt). | Still sees a guest checkout until the end; the finished order is attached to the account. |
+| Order linking | Also runs as a safety net (see below). | Yes — this is what links inline-mode orders. |
+
+**Order-time link (both modes).** On `woocommerce_checkout_order_processed` — once, the moment the order exists, whatever status it ends up in (pending payment, failed, on-hold, processing…) — a still-guest order is attached to the account tied to its billing phone (found or created as above). Orders that already belong to a logged-in customer are never touched, and the hook only runs after the server-side verification check has accepted the order, so the billing phone is the verified one.
+
 > **Classic checkout only.** The `[woocommerce_checkout]` shortcode checkout is supported. The block-based *Cart & Checkout* is not — the feature stays inactive there (a warning is written to the debug log).
 
 ### 4. Smart code entry & SMS autofill
@@ -169,6 +186,7 @@ All gateways send the code through the provider's **pattern/template** (verify-l
 - **Server-side checkout enforcement** — the order is rejected unless the submitted phone equals the verified phone stored in the WooCommerce session.
 - **Privacy-aware logging** — logs are written **only when `WP_DEBUG` is on**; OTP codes are never logged and phone numbers are masked (`0912****89`), and credentials are masked when a gateway request URL is logged.
 - **Safe placeholder emails** built from the site's own domain.
+- **Conservative account linking** — checkout auto login / order linking is opt-in, applies only to guest orders (`customer_id = 0`) and runs only after the verified-phone check passed; logged-in customers' orders and sessions are never modified.
 
 ## Limits at a glance
 
@@ -207,7 +225,7 @@ All gateways send the code through the provider's **pattern/template** (verify-l
 3. **OTP settings** — set the code validity (seconds) and the code length (4–6).
 4. Click **Send test SMS** to confirm the gateway works (it sends `1234`).
 5. **Login page** — enable *Replace login page*, optionally enable *phone number only*, then customise texts, logo, background, overlay and CSS.
-6. **Checkout** (optional) — enable *Checkout phone verification*, choose *Inline* or *Gate*, decide whether logged-in users must verify too, and pick the button colour.
+6. **Checkout** (optional) — enable *Checkout phone verification*, choose *Inline* or *Gate*, decide whether logged-in users must verify too, optionally turn on *Auto login / link order to account*, and pick the button colour.
 7. **Autofill** (optional, recommended) — end your SMS pattern's last line with `@yourdomain.com #code`, using the exact host visitors open.
 8. **Migrating from another plugin?** Use the Digits button on the settings page or **OTP Verifier → Migrate users**.
 9. Visit **My Account** while logged out to see the result.
@@ -236,6 +254,7 @@ Settings are stored in the `otp_verifier_settings` option.
 | Checkout verification (فعال‌سازی تایید شماره موبایل در تسویه‌حساب) | `checkout_verify_enabled` | off | Master switch for checkout verification. |
 | Verification mode (حالت تایید) | `checkout_verify_mode` | `inline` | `inline` or `gate`. |
 | Require for logged-in users (الزام تایید برای کاربران وارد شده) | `checkout_verify_require_logged_in` | off | Also require verification from logged-in customers. |
+| Auto login / link order to account (ورود خودکار / اتصال سفارش به حساب کاربری) | `checkout_verify_auto_login` | off | Guests who verify their phone get an account (found or created) and their order is linked to it; gate mode also logs them in. See [Account linking](#account-linking--auto-login). |
 | Buttons & links colour (رنگ دکمه‌ها و لینک‌ها) | `checkout_verify_color` | `#2d264b` | Accent colour of the checkout widget. |
 
 > The *Lock demo account* checkbox (`lock_demo_account`) is stored but is currently reserved: no behaviour depends on it yet.
@@ -249,6 +268,10 @@ Settings are stored in the `otp_verifier_settings` option.
 **Chrome asks for permission to read the SMS, but nothing fills in.** The SMS's last line must be `@<host> #<code>` and `<host>` must be *exactly* the host the site is opened on. Testing on `localhost` or a staging domain while the pattern names the live domain silently breaks autofill. Also: WebOTP works only on Chrome for Android; iOS uses the keyboard's one-time-code suggestion. Filter the browser console for `[OTP Verifier]` to see what happened.
 
 **The checkout widget/gate does not appear.** Check that checkout verification is enabled; that you are logged out (or *Require for logged-in users* is on); and that the checkout is the classic shortcode checkout, not the block-based one.
+
+**Guest orders are not attached to an account.** Enable *Auto login / link order to account* in the Checkout settings. It only affects guests who verified their phone; orders placed while logged in are left alone, and the setting does nothing when checkout verification itself is off.
+
+**The checkout page reloads once after I verify the code.** That is gate-mode auto login: the customer was just logged in, so the page reloads for WooCommerce to render the logged-in checkout.
 
 **Checkout buttons ignore my colour / look unstyled after an update.** Browsers cache the CSS/JS; the plugin appends its version to asset URLs, so hard-refresh and clear any page/CDN cache. (Every release that touches front-end files bumps the version for this reason.)
 
@@ -280,7 +303,7 @@ includes/
   Admin/                             settings sanitizer, SMS tester, Digits + meta migrators, migration page
   Helpers/class-phone-utils.php      Iranian phone normalisation
   Services/                          OTP repository, rate limiter, script enqueuer
-  WooCommerce/                       checkout verification handler
+  WooCommerce/                       checkout verification handler, auto login & order linking
   sms-gateways/                      FarazSMS, MeliPayamak, SMS.ir, Kavenegar
 templates/
   login/index.php                    the standalone login page
@@ -292,7 +315,7 @@ templates/
 | Action | Nonce | Purpose |
 |---|---|---|
 | `send_otp`, `verify_otp`, `otp_password_login` | `otp_login_nonce` | Login page: send a code, verify it (and log in / sign up), password login. Public. |
-| `otp_checkout_send`, `otp_checkout_verify` | `otp_checkout_nonce` | Checkout: send a code, verify it (stores the phone in the WooCommerce session). Public. |
+| `otp_checkout_send`, `otp_checkout_verify` | `otp_checkout_nonce` | Checkout: send a code, verify it (stores the phone in the WooCommerce session; the response carries `logged_in` when gate-mode auto login signed the customer in). Public. |
 | `otp_verifier_mig_scan`, `_find`, `_preview`, `_run`, `_undo` | `otp_verifier_migration` | Migration page. Requires `manage_options`. |
 
 ### Data
@@ -302,7 +325,17 @@ templates/
 - **User meta** — `phone_number` (standard `09xxxxxxxxx`), `_otp_verifier_migrated_from` (undo marker).
 - **Transients** — `otp_rate_limit_*` (per phone), `otp_ip_limit_*` (per IP).
 - **WooCommerce session** — `otp_verifier_checkout_verified_phone`.
+- **Orders** — with account linking on, a guest order's customer (`customer_id`) is set to the account tied to its billing phone.
 - **WP-Cron** — `otp_verifier_otp_cleanup` (custom `every_10_minutes` schedule) and `otp_verifier_transient_cleanup` (hourly).
+
+### Checkout hooks
+
+| Hook | Used for |
+|---|---|
+| `woocommerce_form_field_tel` | Appends the inline widget after `billing_phone`. |
+| `woocommerce_before_checkout_form` (priority 5) | Renders the gate step. |
+| `woocommerce_checkout_process` | Server-side enforcement: the submitted phone must equal the verified one. |
+| `woocommerce_checkout_order_processed` (priority 20) | Account linking: attaches a guest order to the account for its billing phone. |
 
 ### Adding an SMS gateway
 
@@ -344,6 +377,12 @@ Set `WP_DEBUG` (and `WP_DEBUG_LOG`) to see detailed, privacy-safe logs of every 
 - Enhanced analytics and logging
 
 ## Changelog
+
+### 1.3.11
+- **Change:** the checkout account-linking setting (*"ورود خودکار / اتصال سفارش به حساب کاربری"*) now also runs a final check at the moment WooCommerce actually creates the order — for **both** checkout modes, and regardless of the order's resulting status (pending payment, failed, on-hold, processing, ...). Right after the order object is created (`woocommerce_checkout_order_processed`), if it's still a guest order, the plugin looks up the account tied to the order's verified billing phone, links the order to it if one exists, or creates one (same as the login page's phone-only account logic) and links the new one. This is what actually links **inline-mode** orders to an account (inline mode never had the gate's instant login), and acts as a safety net for gate mode too. An order already tied to a logged-in customer is never touched.
+
+### 1.3.10
+- **Feature:** new checkout setting *"ورود خودکار به حساب کاربری (فقط حالت قفل کامل)"* — when the checkout verification mode is **Gate** and this is on, a guest who verifies their phone at the gate is automatically logged into the account tied to that number, or a new account (role *customer*) is created for the number if none exists — the same account logic the login page's phone-only flow already uses (existing `phone_number`/legacy `digits_phone_no` users are matched and migrated, otherwise a new user is created with a random password and no email is asked for). The checkout page then reloads once so WooCommerce renders it as the logged-in customer (saved address, no "create an account" prompt). Off by default; has no effect on the inline mode or on a customer who is already logged in.
 
 ### 1.3.9
 - **Change:** the checkout phone-verification *flow* now works exactly like the login/signup page, in both the full-lock (gate) and the inline mode. Pressing *send code* disables the button and changes its label to "در حال ارسال..."; when the server answers, the same toast notification the login page uses (SweetAlert2, top corner) appears - "کد تایید برای شماره 0912***4567 ارسال شد" - and, in gate mode, the phone step is replaced by the code step: the info line with the masked number and a back arrow (instead of the old *edit number* text link), the code boxes, the resend link with its countdown, and the verify button (label "در حال بررسی..." while checking). Errors show as a toast plus a message under the form (invalid number - with a red border on the field -, incomplete code, wrong code with the remaining attempts, network timeout, rate limit). After 5 wrong codes (the same limit the server enforces) the customer is sent back to the phone step to request a new code. Resend shows its own "ارسال مجدد" toast.

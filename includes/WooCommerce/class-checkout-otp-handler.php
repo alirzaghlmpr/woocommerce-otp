@@ -48,6 +48,12 @@ class OTP_Verifier_Checkout_Handler
         add_filter('woocommerce_form_field_tel', [$this, 'inject_inline_widget_after_phone_field'], 10, 4);
         add_action('woocommerce_before_checkout_form', [$this, 'render_gate_overlay'], 5);
         add_action('woocommerce_checkout_process', [$this, 'enforce_verification']);
+        // آخرین لایه‌ی اطمینان: درست وقتی سفارش ساخته می‌شود (چه بعداً وضعیتش pending
+        // بماند، چه failed/on-hold/processing/... بشود - این هوک فقط یک‌بار، همان لحظه‌ی
+        // ساخت سفارش، بدون توجه به نتیجه‌ی پرداخت اجرا می‌شود) بررسی می‌کند سفارش مهمان
+        // به یک حساب کاربری متصل است یا نه؛ نبود اتصال را جبران می‌کند - مستقل از این‌که
+        // «ورود خودکار» در لحظه‌ی تایید کد (فقط حالت قفل کامل) واقعاً اجرا شده باشد یا نه.
+        add_action('woocommerce_checkout_order_processed', [$this, 'link_or_create_customer_for_order'], 20, 3);
 
         otp_verifier_log('✅ OTP_Verifier_Checkout_Handler: هوک‌های تایید موبایل در تسویه‌حساب ثبت شدند (enabled=' . ($this->is_enabled() ? 'true' : 'false') . ', mode=' . $this->get_mode() . ')');
     }
@@ -451,14 +457,169 @@ class OTP_Verifier_Checkout_Handler
 
             $this->set_verified_phone($phone);
 
+            // «ورود خودکار» فقط برای مهمان‌ها و فقط در حالت قفل کامل معنی دارد - کاربری
+            // که از قبل وارد شده نباید حسابش با شماره‌ی تازه‌تایید‌شده دست‌کاری شود، و در
+            // حالت داخل فرم مشتری معمولاً همچنان در حال تکمیل یک چک‌اوت مهمانی است.
+            $logged_in = false;
+            if ($this->get_mode() === 'gate' && !is_user_logged_in()) {
+                $settings = get_option('otp_verifier_settings', []);
+                if (!empty($settings['checkout_verify_auto_login'])) {
+                    $logged_in = $this->auto_login_or_register($phone);
+                }
+            }
+
             wp_send_json_success([
-                'message' => 'شماره موبایل با موفقیت تایید شد.',
-                'phone'   => $phone,
+                'message'   => 'شماره موبایل با موفقیت تایید شد.',
+                'phone'     => $phone,
+                'logged_in' => $logged_in,
             ]);
         } catch (Exception $e) {
             otp_verifier_log('❌ checkout handle_verify_otp: EXCEPTION - ' . $e->getMessage());
             wp_send_json_error(['message' => 'خطای سیستمی رخ داده است.']);
         }
+    }
+
+    /**
+     * ورود خودکار مهمانی که شماره‌اش را در گیت تایید کرد، به حساب کاربری متصل به
+     * همان شماره (find_or_create_customer_by_phone می‌سازد/پیدا می‌کند). فقط لحظه‌ی
+     * تایید کد در حالت قفل کامل صدا زده می‌شود؛ برای حالت داخل فرم و به‌عنوان یک لایه
+     * اطمینان برای همین حالت قفل کامل، link_or_create_customer_for_order (پایین‌تر)
+     * همین کار را - بدون لاگین‌کردن زنده‌ی مرورگر، فقط با اتصال خود سفارش - در لحظه‌ی
+     * ساخت سفارش هم انجام می‌دهد.
+     */
+    private function auto_login_or_register($phone)
+    {
+        $user_id = $this->find_or_create_customer_by_phone($phone);
+        if (!$user_id) {
+            return false;
+        }
+
+        wp_set_current_user($user_id);
+        wp_set_auth_cookie($user_id);
+
+        return true;
+    }
+
+    /**
+     * حساب کاربری متصل به این شماره موبایل را پیدا می‌کند، یا اگر وجود نداشت
+     * می‌سازد - دقیقاً همان منطق ورود/ثبت‌نام با شماره موبایل در صفحه ورود
+     * (OTP_AJAX_Handler::handle_verify_otp)، اما بدون فیلد نام کاربری/رمز عبور
+     * (چون نه گیت چک‌اوت و نه سفارش هیچ‌کدام را نمی‌گیرند). رمز عبور تصادفی تولید
+     * و هرگز به مشتری نمایش داده نمی‌شود - دقیقاً مثل ورود با شماره موبایل، مشتری
+     * همیشه از طریق OTP وارد می‌شود. فقط lookup/create انجام می‌دهد - کاربر جاری
+     * (session/کوکی) یا سفارش را دست نمی‌زند؛ آن دو وظیفه‌ی صدازننده‌هاست.
+     *
+     * @return int|false شناسه‌ی کاربر، یا false اگر ساخت حساب شکست خورد.
+     */
+    private function find_or_create_customer_by_phone($phone)
+    {
+        $user = get_users([
+            'meta_key'    => 'phone_number',
+            'meta_value'  => $phone,
+            'number'      => 1,
+            'count_total' => false,
+        ]);
+
+        if (!empty($user)) {
+            otp_verifier_log('✅ Checkout: کاربر موجود با phone_number پیدا شد - User ID: ' . $user[0]->ID);
+            return (int) $user[0]->ID;
+        }
+
+        $digits_phone = OTP_Verifier_Phone_Util::to_digits_format($phone);
+        $digits_user = get_users([
+            'meta_key'    => 'digits_phone_no',
+            'meta_value'  => $digits_phone,
+            'number'      => 1,
+            'count_total' => false,
+        ]);
+
+        if (!empty($digits_user)) {
+            $user_id = $digits_user[0]->ID;
+            update_user_meta($user_id, 'phone_number', $phone);
+            otp_verifier_log('✅ Checkout: کاربر قدیمی Digits مهاجرت داده شد - User ID: ' . $user_id);
+            return (int) $user_id;
+        }
+
+        $username = $phone;
+        if (username_exists($username)) {
+            // شماره به‌عنوان نام کاربری قبلاً به کاربر دیگری تعلق دارد (بدون متای
+            // phone_number مطابق، وگرنه در جستجوی بالا پیدا می‌شد) - یک نام کاربری
+            // یکتا می‌سازیم تا این برخورد نادر هرگز باعث شکست ثبت‌نام نشود.
+            $username = $phone . '_' . wp_generate_password(4, false, false);
+        }
+
+        // ایمیل جایگزین بر اساس دامنه‌ی خود سایت (نه example.com) - مثل صفحه ورود.
+        $site_host = wp_parse_url(home_url(), PHP_URL_HOST);
+        $site_host = $site_host ? preg_replace('/^www\./', '', $site_host) : 'localhost';
+        $user_email = $phone . '@' . $site_host;
+
+        $user_id = wp_create_user($username, wp_generate_password(16, true, true), $user_email);
+
+        if (is_wp_error($user_id)) {
+            otp_verifier_log('❌ Checkout: ساخت کاربر شکست خورد - ' . $user_id->get_error_message());
+            return false;
+        }
+
+        (new WP_User($user_id))->set_role('customer');
+        update_user_meta($user_id, 'phone_number', $phone);
+        otp_verifier_log('✅ Checkout: کاربر جدید ساخته شد - User ID: ' . $user_id);
+
+        return (int) $user_id;
+    }
+
+    /**
+     * لایه‌ی آخر اطمینان - مستقل از این‌که در جریان چک‌اوت (لحظه‌ی تایید کد در گیت)
+     * لاگین خودکار واقعاً اتفاق افتاده باشد یا نه، و مستقل از حالت (inline/gate):
+     * درست بعد از ساخته‌شدن خود سفارش (یک‌بار، صرف‌نظر از این‌که وضعیتش بعداً
+     * pending/on-hold/processing/failed/... بشود) بررسی می‌کند سفارش مهمان است یا
+     * به یک حساب واقعی متصل. اگر مهمان است، به شماره‌ی تایید‌شده‌ی همان سفارش، حساب
+     * را پیدا/می‌سازد (find_or_create_customer_by_phone) و سفارش را به آن وصل
+     * می‌کند - بدون این‌که چیزی در session/کوکی مرورگر تغییر کند (مشتری همچنان تا
+     * پایان همین درخواست به‌صورت مهمان می‌بیند، فقط رکورد سفارش صاحب پیدا می‌کند).
+     *
+     * امنیت: این تابع فقط وقتی سفارش را دست می‌زند که (۱) گزینه «ورود خودکار» در
+     * تنظیمات فعال باشد، (۲) تایید شماره در چک‌اوت کلاً فعال باشد، و (۳) سفارش
+     * هنوز به هیچ کاربری متصل نباشد (customer_id=0). enforce_verification() که روی
+     * woocommerce_checkout_process ثبت شده، پیش از این هوک اجرا و سفارش‌های بدون
+     * شماره‌ی تایید‌شده را با notice خطا رد می‌کند - یعنی اگر اصلاً به این‌جا
+     * رسیدیم و سفارش مهمان است، billing_phone همان شماره‌ی تایید‌شده در session
+     * بوده (وگرنه woocommerce_checkout_order_processed هرگز اجرا نمی‌شد). کاربرانی
+     * که از قبل وارد حساب کاربری خود بوده‌اند customer_id غیرصفر دارند و این تابع
+     * اصلاً به آن‌ها دست نمی‌زند.
+     */
+    public function link_or_create_customer_for_order($order_id, $posted_data, $order)
+    {
+        if (!$this->is_enabled()) {
+            return;
+        }
+
+        $settings = get_option('otp_verifier_settings', []);
+        if (empty($settings['checkout_verify_auto_login'])) {
+            return;
+        }
+
+        if (!$order instanceof WC_Order) {
+            $order = wc_get_order($order_id);
+        }
+        if (!$order || $order->get_customer_id() > 0) {
+            return;
+        }
+
+        $billing_phone = OTP_Verifier_Phone_Util::sanitize_iranian_phone($order->get_billing_phone());
+        if (!$billing_phone) {
+            otp_verifier_log('⚠️ Checkout order link: سفارش #' . $order_id . ' فاقد billing_phone معتبر است - نادیده گرفته شد.');
+            return;
+        }
+
+        $user_id = $this->find_or_create_customer_by_phone($billing_phone);
+        if (!$user_id) {
+            return;
+        }
+
+        $order->set_customer_id($user_id);
+        $order->save();
+
+        otp_verifier_log('✅ Checkout order link: سفارش #' . $order_id . ' به کاربر #' . $user_id . ' متصل شد.');
     }
 
     /**
