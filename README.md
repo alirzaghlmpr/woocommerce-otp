@@ -1,4 +1,8 @@
-﻿# OTP Verifier
+﻿<p align="center">
+  <img src="icon.png" alt="OTP Verifier icon" width="128" height="128">
+</p>
+
+# OTP Verifier
 
 **Passwordless phone login, signup and WooCommerce checkout phone verification for WordPress — with one-time codes (OTP) sent by SMS.**
 
